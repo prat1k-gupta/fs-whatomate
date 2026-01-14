@@ -1423,18 +1423,18 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 	// Handle conditional_routing step type - evaluate routes and proceed immediately (no message sent)
 	if step.MessageType == models.FlowStepTypeConditionalRouting {
 		a.Log.Info("Processing conditional routing step", "step", step.StepName, "routes_count", len(step.ConditionalRoutes))
-		
+
 		// Evaluate conditional routes
 		nextStepName := ""
 		if len(step.ConditionalRoutes) > 0 {
 			nextStepName = a.evaluateConditionalRoutes(step.ConditionalRoutes, "", session.SessionData)
 		}
-		
+
 		// Fall back to next_step if no route matched
 		if nextStepName == "" {
 			nextStepName = step.NextStep
 		}
-		
+
 		// Fall back to sequential if still empty
 		if nextStepName == "" {
 			for i, s := range flow.Steps {
@@ -2779,7 +2779,7 @@ func parseNumber(s string) (float64, error) {
 // evaluateConditionalRoutes evaluates conditional routing rules and returns target step
 func (a *App) evaluateConditionalRoutes(routes []interface{}, userInput string, sessionData models.JSONB) string {
 	a.Log.Info("Starting conditional route evaluation", "total_routes", len(routes), "user_input", userInput, "session_data", sessionData)
-	
+
 	for idx, routeInterface := range routes {
 		route, ok := routeInterface.(map[string]interface{})
 		if !ok {
@@ -2833,7 +2833,7 @@ func (a *App) evaluateConditionalRoutes(routes []interface{}, userInput string, 
 		// Evaluate the condition
 		matched := false
 		a.Log.Info("Evaluating condition", "index", idx, "operator", operator, "actual_value", actualValue, "expected_value", expectedValue, "value_source", valueSource)
-		
+
 		switch strings.ToLower(operator) {
 		case "==", "equals", "exact":
 			matched = actualValue == expectedValue
