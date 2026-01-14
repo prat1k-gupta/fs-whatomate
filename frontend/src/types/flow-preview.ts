@@ -21,12 +21,20 @@ export interface TransferConfig {
   notes: string
 }
 
+export interface ConditionalRoute {
+  operator: string
+  value: string
+  target: string
+  variable?: string
+  default?: boolean
+}
+
 export interface FlowStep {
   id?: string
   step_name: string
   step_order: number
   message: string
-  message_type: 'text' | 'buttons' | 'api_fetch' | 'whatsapp_flow' | 'transfer'
+  message_type: 'text' | 'buttons' | 'conditional_routing' | 'api_fetch' | 'whatsapp_flow' | 'transfer'
   input_type: 'none' | 'text' | 'number' | 'email' | 'phone' | 'date' | 'select'
   input_config: Record<string, any>
   api_config: ApiConfig
@@ -37,6 +45,7 @@ export interface FlowStep {
   store_as: string
   next_step: string
   conditional_next?: Record<string, string>
+  conditional_routes?: ConditionalRoute[]
   retry_on_invalid: boolean
   max_retries: number
   skip_condition: string

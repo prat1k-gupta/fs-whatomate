@@ -81,12 +81,13 @@ const (
 type FlowStepType string
 
 const (
-	FlowStepTypeText     FlowStepType = "text"
-	FlowStepTypeTemplate FlowStepType = "template"
-	FlowStepTypeScript   FlowStepType = "script"
-	FlowStepTypeAPIFetch FlowStepType = "api_fetch"
-	FlowStepTypeButtons  FlowStepType = "buttons"
-	FlowStepTypeTransfer FlowStepType = "transfer"
+	FlowStepTypeText                FlowStepType = "text"
+	FlowStepTypeTemplate            FlowStepType = "template"
+	FlowStepTypeScript              FlowStepType = "script"
+	FlowStepTypeAPIFetch            FlowStepType = "api_fetch"
+	FlowStepTypeButtons             FlowStepType = "buttons"
+	FlowStepTypeTransfer            FlowStepType = "transfer"
+	FlowStepTypeConditionalRouting  FlowStepType = "conditional_routing"
 )
 
 // SessionStatus represents chatbot session states

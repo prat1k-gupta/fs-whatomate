@@ -184,10 +184,11 @@ type ChatbotFlowStep struct {
 	InputConfig     JSONB      `gorm:"type:jsonb" json:"input_config"`
 	ValidationRegex string     `gorm:"size:255" json:"validation_regex"`
 	ValidationError string     `gorm:"type:text" json:"validation_error"`
-	StoreAs         string     `gorm:"size:100" json:"store_as"`
-	NextStep        string     `gorm:"size:100" json:"next_step"`
-	ConditionalNext JSONB      `gorm:"type:jsonb" json:"conditional_next"` // {"option1": "step_a", "default": "step_b"}
-	SkipCondition   string     `gorm:"type:text" json:"skip_condition"`
+	StoreAs           string     `gorm:"size:100" json:"store_as"`
+	NextStep          string     `gorm:"size:100" json:"next_step"`
+	ConditionalNext   JSONB      `gorm:"type:jsonb" json:"conditional_next"`   // {"option1": "step_a", "default": "step_b"} - For buttons
+	ConditionalRoutes JSONBArray `gorm:"type:jsonb;default:'[]'" json:"conditional_routes"` // [{operator, value, target}] - For all steps
+	SkipCondition     string     `gorm:"type:text" json:"skip_condition"`
 	RetryOnInvalid  bool       `gorm:"default:true" json:"retry_on_invalid"`
 	MaxRetries      int        `gorm:"default:3" json:"max_retries"`
 

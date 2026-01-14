@@ -69,6 +69,7 @@ const connections = ref<Array<{
 const messageTypeIcons: Record<string, any> = {
   text: MessageSquare,
   buttons: MousePointerClick,
+  conditional_routing: GitBranch,
   api_fetch: Globe,
   whatsapp_flow: MessageCircle,
   transfer: Users
@@ -77,6 +78,7 @@ const messageTypeIcons: Record<string, any> = {
 const messageTypeColors: Record<string, string> = {
   text: 'bg-blue-500',
   buttons: 'bg-purple-500',
+  conditional_routing: 'bg-pink-500',
   api_fetch: 'bg-orange-500',
   whatsapp_flow: 'bg-green-500',
   transfer: 'bg-amber-500'

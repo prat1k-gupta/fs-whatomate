@@ -1129,6 +1129,15 @@ func (a *App) processFlowResponse(account *models.WhatsAppAccount, session *mode
 		nextStepName = flow.Steps[currentStepIndex+1].StepName
 	}
 
+	// Check conditional routes first (new operator-based routing)
+	if len(currentStep.ConditionalRoutes) > 0 {
+		routedStep := a.evaluateConditionalRoutes(currentStep.ConditionalRoutes, userInput, session.SessionData)
+		if routedStep != "" {
+			nextStepName = routedStep
+			a.Log.Info("Conditional route matched", "route_target", routedStep, "user_input", userInput)
+		}
+	}
+
 	// Check conditional next - use buttonID first (for button/list responses), then userInput
 	if len(currentStep.ConditionalNext) > 0 {
 		// Try buttonID first (for interactive responses)
@@ -1355,7 +1364,7 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 	}
 	if skippedSteps[step.StepName] {
 		a.Log.Warn("Skip loop detected, completing flow", "step", step.StepName)
-		a.completeFlow(account, session, contact, flow)
+		// a.completeFlow(account, session, contact, flow)
 		return
 	}
 
@@ -1407,6 +1416,61 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 		a.DB.Model(session).Update("current_step", nextStep.StepName)
 
 		// Recursively check next step (it may also need to be skipped)
+		a.sendStepWithSkipCheck(account, session, contact, nextStep, flow, skippedSteps)
+		return
+	}
+
+	// Handle conditional_routing step type - evaluate routes and proceed immediately (no message sent)
+	if step.MessageType == models.FlowStepTypeConditionalRouting {
+		a.Log.Info("Processing conditional routing step", "step", step.StepName, "routes_count", len(step.ConditionalRoutes))
+		
+		// Evaluate conditional routes
+		nextStepName := ""
+		if len(step.ConditionalRoutes) > 0 {
+			nextStepName = a.evaluateConditionalRoutes(step.ConditionalRoutes, "", session.SessionData)
+		}
+		
+		// Fall back to next_step if no route matched
+		if nextStepName == "" {
+			nextStepName = step.NextStep
+		}
+		
+		// Fall back to sequential if still empty
+		if nextStepName == "" {
+			for i, s := range flow.Steps {
+				if s.StepName == step.StepName && i+1 < len(flow.Steps) {
+					nextStepName = flow.Steps[i+1].StepName
+					break
+				}
+			}
+		}
+
+		if nextStepName == "" {
+			// No next step, complete flow
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+
+		// Find and execute next step
+		var nextStep *models.ChatbotFlowStep
+		for i := range flow.Steps {
+			if flow.Steps[i].StepName == nextStepName {
+				nextStep = &flow.Steps[i]
+				break
+			}
+		}
+
+		if nextStep == nil {
+			a.Log.Warn("Next step not found after conditional routing, completing flow", "next_step", nextStepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+
+		// Update session to next step
+		session.CurrentStep = nextStep.StepName
+		a.DB.Model(session).Update("current_step", nextStep.StepName)
+
+		// Recursively process next step
 		a.sendStepWithSkipCheck(account, session, contact, nextStep, flow, skippedSteps)
 		return
 	}
@@ -2710,4 +2774,142 @@ func parseNumber(s string) (float64, error) {
 	var n float64
 	_, err := fmt.Sscanf(s, "%f", &n)
 	return n, err
+}
+
+// evaluateConditionalRoutes evaluates conditional routing rules and returns target step
+func (a *App) evaluateConditionalRoutes(routes []interface{}, userInput string, sessionData models.JSONB) string {
+	a.Log.Info("Starting conditional route evaluation", "total_routes", len(routes), "user_input", userInput, "session_data", sessionData)
+	
+	for idx, routeInterface := range routes {
+		route, ok := routeInterface.(map[string]interface{})
+		if !ok {
+			a.Log.Warn("Invalid route object at index", "index", idx, "route", routeInterface)
+			continue
+		}
+
+		a.Log.Info("Evaluating route", "index", idx, "route_data", route)
+
+		// Check if this is a default route
+		if isDefault, ok := route["default"].(bool); ok && isDefault {
+			if target, ok := route["target"].(string); ok {
+				a.Log.Info("Default route matched", "target", target)
+				return target
+			}
+			a.Log.Warn("Default route has no target", "route", route)
+			continue
+		}
+
+		// Get route configuration
+		operator, _ := route["operator"].(string)
+		expectedValue, _ := route["value"].(string)
+		target, _ := route["target"].(string)
+		variable, _ := route["variable"].(string)
+
+		a.Log.Info("Route configuration parsed", "index", idx, "operator", operator, "expected", expectedValue, "target", target, "variable", variable)
+
+		if target == "" {
+			a.Log.Warn("Route has no target, skipping", "index", idx)
+			continue
+		}
+
+		// Determine the actual value to compare
+		actualValue := userInput
+		valueSource := "user_input"
+		if variable != "" {
+			// Use value from session data if variable specified
+			if val, exists := sessionData[variable]; exists && val != nil {
+				actualValue = fmt.Sprintf("%v", val)
+				valueSource = fmt.Sprintf("session[%s]", variable)
+				a.Log.Info("Using session variable", "variable", variable, "actual_value", actualValue)
+			} else {
+				// Variable not found in session data, skip this route
+				a.Log.Warn("Variable not found in session data, skipping route", "variable", variable, "session_keys", getSessionKeys(sessionData))
+				continue
+			}
+		} else {
+			a.Log.Info("Using user input as comparison value", "user_input", userInput)
+		}
+
+		// Evaluate the condition
+		matched := false
+		a.Log.Info("Evaluating condition", "index", idx, "operator", operator, "actual_value", actualValue, "expected_value", expectedValue, "value_source", valueSource)
+		
+		switch strings.ToLower(operator) {
+		case "==", "equals", "exact":
+			matched = actualValue == expectedValue
+			a.Log.Info("Equals comparison", "matched", matched, "actual", actualValue, "expected", expectedValue)
+		case "!=", "not_equals":
+			matched = actualValue != expectedValue
+			a.Log.Info("Not equals comparison", "matched", matched, "actual", actualValue, "expected", expectedValue)
+		case "contains", "includes":
+			matched = strings.Contains(strings.ToLower(actualValue), strings.ToLower(expectedValue))
+			a.Log.Info("Contains comparison", "matched", matched, "actual_lower", strings.ToLower(actualValue), "expected_lower", strings.ToLower(expectedValue))
+		case "not_contains":
+			matched = !strings.Contains(strings.ToLower(actualValue), strings.ToLower(expectedValue))
+			a.Log.Info("Not contains comparison", "matched", matched, "actual_lower", strings.ToLower(actualValue), "expected_lower", strings.ToLower(expectedValue))
+		case "starts_with":
+			matched = strings.HasPrefix(strings.ToLower(actualValue), strings.ToLower(expectedValue))
+			a.Log.Info("Starts with comparison", "matched", matched, "actual_lower", strings.ToLower(actualValue), "expected_lower", strings.ToLower(expectedValue))
+		case "ends_with":
+			matched = strings.HasSuffix(strings.ToLower(actualValue), strings.ToLower(expectedValue))
+			a.Log.Info("Ends with comparison", "matched", matched, "actual_lower", strings.ToLower(actualValue), "expected_lower", strings.ToLower(expectedValue))
+		case ">", "greater_than":
+			actualNum, err1 := parseNumber(actualValue)
+			expectedNum, err2 := parseNumber(expectedValue)
+			a.Log.Info("Greater than comparison", "actual_num", actualNum, "expected_num", expectedNum, "parse_errors", fmt.Sprintf("actual_err=%v, expected_err=%v", err1, err2))
+			if err1 == nil && err2 == nil {
+				matched = actualNum > expectedNum
+			}
+		case "<", "less_than":
+			actualNum, err1 := parseNumber(actualValue)
+			expectedNum, err2 := parseNumber(expectedValue)
+			a.Log.Info("Less than comparison", "actual_num", actualNum, "expected_num", expectedNum, "parse_errors", fmt.Sprintf("actual_err=%v, expected_err=%v", err1, err2))
+			if err1 == nil && err2 == nil {
+				matched = actualNum < expectedNum
+			}
+		case ">=", "greater_than_or_equal":
+			actualNum, err1 := parseNumber(actualValue)
+			expectedNum, err2 := parseNumber(expectedValue)
+			a.Log.Info("Greater or equal comparison", "actual_num", actualNum, "expected_num", expectedNum, "parse_errors", fmt.Sprintf("actual_err=%v, expected_err=%v", err1, err2))
+			if err1 == nil && err2 == nil {
+				matched = actualNum >= expectedNum
+			}
+		case "<=", "less_than_or_equal":
+			actualNum, err1 := parseNumber(actualValue)
+			expectedNum, err2 := parseNumber(expectedValue)
+			a.Log.Info("Less or equal comparison", "actual_num", actualNum, "expected_num", expectedNum, "parse_errors", fmt.Sprintf("actual_err=%v, expected_err=%v", err1, err2))
+			if err1 == nil && err2 == nil {
+				matched = actualNum <= expectedNum
+			}
+		case "empty", "is_empty":
+			matched = actualValue == ""
+			a.Log.Info("Is empty comparison", "matched", matched, "actual_value", actualValue)
+		case "not_empty", "is_not_empty":
+			matched = actualValue != ""
+			a.Log.Info("Is not empty comparison", "matched", matched, "actual_value", actualValue)
+		default:
+			a.Log.Warn("Unknown operator", "operator", operator)
+		}
+
+		a.Log.Info("Route evaluation result", "index", idx, "matched", matched, "will_route_to", target)
+
+		if matched {
+			a.Log.Info("✅ Conditional route MATCHED - routing to target", "route_index", idx, "operator", operator, "expected", expectedValue, "actual", actualValue, "target", target)
+			return target
+		} else {
+			a.Log.Info("❌ Route did NOT match, continuing to next route", "route_index", idx)
+		}
+	}
+
+	a.Log.Warn("No conditional routes matched, returning empty (will use default or sequential)", "total_routes_checked", len(routes))
+	return "" // No route matched
+}
+
+// Helper function to get session data keys for debugging
+func getSessionKeys(sessionData models.JSONB) []string {
+	keys := make([]string, 0, len(sessionData))
+	for k := range sessionData {
+		keys = append(keys, k)
+	}
+	return keys
 }

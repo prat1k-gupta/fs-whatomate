@@ -645,23 +645,24 @@ func (a *App) ListChatbotFlows(r *fastglue.Request) error {
 
 // FlowStepRequest represents a step in a flow creation/update request
 type FlowStepRequest struct {
-	StepName        string                   `json:"step_name"`
-	StepOrder       int                      `json:"step_order"`
-	Message         string                   `json:"message"`
-	MessageType     models.FlowStepType      `json:"message_type"`
-	InputType       models.InputType         `json:"input_type"`
-	InputConfig     map[string]interface{}   `json:"input_config"`
-	ApiConfig       map[string]interface{}   `json:"api_config"`
-	Buttons         []map[string]interface{} `json:"buttons"`
-	TransferConfig  map[string]interface{}   `json:"transfer_config"`
-	ValidationRegex string                   `json:"validation_regex"`
-	ValidationError string                   `json:"validation_error"`
-	StoreAs         string                   `json:"store_as"`
-	NextStep        string                   `json:"next_step"`
-	ConditionalNext map[string]interface{}   `json:"conditional_next"`
-	SkipCondition   string                   `json:"skip_condition"`
-	RetryOnInvalid  bool                     `json:"retry_on_invalid"`
-	MaxRetries      int                      `json:"max_retries"`
+	StepName          string                   `json:"step_name"`
+	StepOrder         int                      `json:"step_order"`
+	Message           string                   `json:"message"`
+	MessageType       models.FlowStepType      `json:"message_type"`
+	InputType         models.InputType         `json:"input_type"`
+	InputConfig       map[string]interface{}   `json:"input_config"`
+	ApiConfig         map[string]interface{}   `json:"api_config"`
+	Buttons           []map[string]interface{} `json:"buttons"`
+	TransferConfig    map[string]interface{}   `json:"transfer_config"`
+	ValidationRegex   string                   `json:"validation_regex"`
+	ValidationError   string                   `json:"validation_error"`
+	StoreAs           string                   `json:"store_as"`
+	NextStep          string                   `json:"next_step"`
+	ConditionalNext   map[string]interface{}   `json:"conditional_next"`
+	ConditionalRoutes []interface{}            `json:"conditional_routes"`
+	SkipCondition     string                   `json:"skip_condition"`
+	RetryOnInvalid    bool                     `json:"retry_on_invalid"`
+	MaxRetries        int                      `json:"max_retries"`
 }
 
 // CreateChatbotFlow creates a new chatbot flow
@@ -723,26 +724,33 @@ func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
 			buttons = append(buttons, btn)
 		}
 
+		// Convert conditional routes to JSONBArray
+		var conditionalRoutes models.JSONBArray
+		for _, route := range stepReq.ConditionalRoutes {
+			conditionalRoutes = append(conditionalRoutes, route)
+		}
+
 		step := models.ChatbotFlowStep{
-			BaseModel:       models.BaseModel{ID: uuid.New()},
-			FlowID:          flowID,
-			StepName:        stepReq.StepName,
-			StepOrder:       i + 1,
-			Message:         stepReq.Message,
-			MessageType:     stepReq.MessageType,
-			InputType:       stepReq.InputType,
-			InputConfig:     models.JSONB(stepReq.InputConfig),
-			ApiConfig:       models.JSONB(stepReq.ApiConfig),
-			Buttons:         buttons,
-			TransferConfig:  models.JSONB(stepReq.TransferConfig),
-			ValidationRegex: stepReq.ValidationRegex,
-			ValidationError: stepReq.ValidationError,
-			StoreAs:         stepReq.StoreAs,
-			NextStep:        stepReq.NextStep,
-			ConditionalNext: models.JSONB(stepReq.ConditionalNext),
-			SkipCondition:   stepReq.SkipCondition,
-			RetryOnInvalid:  stepReq.RetryOnInvalid,
-			MaxRetries:      stepReq.MaxRetries,
+			BaseModel:         models.BaseModel{ID: uuid.New()},
+			FlowID:            flowID,
+			StepName:          stepReq.StepName,
+			StepOrder:         i + 1,
+			Message:           stepReq.Message,
+			MessageType:       stepReq.MessageType,
+			InputType:         stepReq.InputType,
+			InputConfig:       models.JSONB(stepReq.InputConfig),
+			ApiConfig:         models.JSONB(stepReq.ApiConfig),
+			Buttons:           buttons,
+			TransferConfig:    models.JSONB(stepReq.TransferConfig),
+			ValidationRegex:   stepReq.ValidationRegex,
+			ValidationError:   stepReq.ValidationError,
+			StoreAs:           stepReq.StoreAs,
+			NextStep:          stepReq.NextStep,
+			ConditionalNext:   models.JSONB(stepReq.ConditionalNext),
+			ConditionalRoutes: conditionalRoutes,
+			SkipCondition:     stepReq.SkipCondition,
+			RetryOnInvalid:    stepReq.RetryOnInvalid,
+			MaxRetries:        stepReq.MaxRetries,
 		}
 		if step.MessageType == "" {
 			step.MessageType = models.FlowStepTypeText
@@ -864,40 +872,54 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 
 	// Update steps if provided
 	if len(req.Steps) > 0 {
-		// Delete existing steps
-		if err := tx.Where("flow_id = ?", id).Delete(&models.ChatbotFlowStep{}).Error; err != nil {
+		// Hard delete existing steps (using Unscoped) to prevent duplicates
+		// Note: Steps are completely replaced on each save, no need for soft delete here
+		if err := tx.Unscoped().Where("flow_id = ?", id).Delete(&models.ChatbotFlowStep{}).Error; err != nil {
 			tx.Rollback()
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update flow steps", nil, "")
 		}
 
 		// Create new steps
 		for i, stepReq := range req.Steps {
+			a.Log.Info("Creating step", "index", i, "step_name", stepReq.StepName, "message_type", stepReq.MessageType, "conditional_routes_count", len(stepReq.ConditionalRoutes))
+			
 			// Convert buttons to JSONBArray
 			var buttons models.JSONBArray
 			for _, btn := range stepReq.Buttons {
 				buttons = append(buttons, btn)
 			}
 
+			// Convert conditional routes to JSONBArray
+			var conditionalRoutes models.JSONBArray
+			for _, route := range stepReq.ConditionalRoutes {
+				conditionalRoutes = append(conditionalRoutes, route)
+			}
+			
+			if len(stepReq.ConditionalRoutes) > 0 {
+				a.Log.Info("Conditional routes data", "step_name", stepReq.StepName, "routes", stepReq.ConditionalRoutes)
+			}
+
 			step := models.ChatbotFlowStep{
-				BaseModel:       models.BaseModel{ID: uuid.New()},
-				FlowID:          id,
-				StepName:        stepReq.StepName,
-				StepOrder:       i + 1,
-				Message:         stepReq.Message,
-				MessageType:     stepReq.MessageType,
-				InputType:       stepReq.InputType,
-				InputConfig:     models.JSONB(stepReq.InputConfig),
-				ApiConfig:       models.JSONB(stepReq.ApiConfig),
-				Buttons:         buttons,
-				TransferConfig:  models.JSONB(stepReq.TransferConfig),
-				ValidationRegex: stepReq.ValidationRegex,
-				ValidationError: stepReq.ValidationError,
-				StoreAs:         stepReq.StoreAs,
-				NextStep:        stepReq.NextStep,
-				ConditionalNext: models.JSONB(stepReq.ConditionalNext),
-				SkipCondition:   stepReq.SkipCondition,
-				RetryOnInvalid:  stepReq.RetryOnInvalid,
-				MaxRetries:      stepReq.MaxRetries,
+				BaseModel:         models.BaseModel{ID: uuid.New()},
+				FlowID:            id,
+				StepName:          stepReq.StepName,
+				StepOrder:         i + 1,
+				Message:           stepReq.Message,
+				MessageType:       stepReq.MessageType,
+				InputType:         stepReq.InputType,
+				InputConfig:       models.JSONB(stepReq.InputConfig),
+				ApiConfig:         models.JSONB(stepReq.ApiConfig),
+				Buttons:           buttons,
+				TransferConfig:    models.JSONB(stepReq.TransferConfig),
+				ValidationRegex:   stepReq.ValidationRegex,
+				ValidationError:   stepReq.ValidationError,
+				StoreAs:           stepReq.StoreAs,
+				NextStep:          stepReq.NextStep,
+				ConditionalNext:   models.JSONB(stepReq.ConditionalNext),
+				ConditionalRoutes: conditionalRoutes,
+				SkipCondition:     stepReq.SkipCondition,
+				RetryOnInvalid:    stepReq.RetryOnInvalid,
+				MaxRetries:        stepReq.MaxRetries,
 			}
 			if step.MessageType == "" {
 				step.MessageType = models.FlowStepTypeText

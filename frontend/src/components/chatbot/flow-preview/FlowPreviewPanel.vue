@@ -10,6 +10,7 @@ import {
   Globe,
   MessageCircle,
   Users,
+  GitBranch,
   Eye,
   Edit3,
   ExternalLink,
@@ -43,6 +44,7 @@ watch(() => props.initialMode, (newMode) => {
 const messageTypeIcons: Record<string, any> = {
   text: MessageSquare,
   buttons: MousePointerClick,
+  conditional_routing: GitBranch,
   api_fetch: Globe,
   whatsapp_flow: MessageCircle,
   transfer: Users
@@ -120,7 +122,7 @@ const localListPickerOpen = computed({
                 @click="handleSelectMessageType(type)"
               >
                 <component :is="icon" class="h-3.5 w-3.5 mr-1.5" />
-                {{ type === 'api_fetch' ? 'API' : type === 'whatsapp_flow' ? 'Flow' : type.charAt(0).toUpperCase() + type.slice(1) }}
+                {{ type === 'api_fetch' ? 'API' : type === 'whatsapp_flow' ? 'Flow' : type === 'conditional_routing' ? 'Routing' : type.charAt(0).toUpperCase() + type.slice(1) }}
               </Button>
             </div>
           </div>
@@ -144,8 +146,8 @@ const localListPickerOpen = computed({
                 <!-- Chat Messages -->
                 <ScrollArea class="flex-1 p-4">
                   <div class="space-y-3">
-                  <!-- Bot Message Bubble -->
-                  <div class="flex justify-start">
+                  <!-- Bot Message Bubble (skip for conditional_routing) -->
+                  <div v-if="selectedStep.message_type !== 'conditional_routing'" class="flex justify-start">
                     <div class="max-w-[85%]">
                       <div class="bg-white dark:bg-[#202c33] rounded-lg rounded-tl-none shadow-sm p-3">
                         <p v-if="selectedStep.message" class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{{ selectedStep.message }}</p>
@@ -188,7 +190,7 @@ const localListPickerOpen = computed({
                   </div>
 
                   <!-- User Response Placeholder -->
-                  <div v-if="selectedStep.message_type !== 'transfer'" class="flex justify-end">
+                  <div v-if="selectedStep.message_type !== 'transfer' && selectedStep.message_type !== 'conditional_routing'" class="flex justify-end">
                     <div class="max-w-[85%]">
                       <div class="bg-[#d9fdd3] dark:bg-[#005c4b] rounded-lg rounded-tr-none shadow-sm p-3">
                         <p class="text-sm text-gray-800 dark:text-gray-200 italic">
@@ -235,6 +237,14 @@ const localListPickerOpen = computed({
                     <div class="bg-blue-100 dark:bg-blue-900/30 text-xs text-blue-700 dark:text-blue-400 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                       <Globe class="h-3 w-3" />
                       <span>Message populated from API</span>
+                    </div>
+                  </div>
+
+                  <!-- Conditional Routing Info -->
+                  <div v-if="selectedStep.message_type === 'conditional_routing'" class="flex justify-center">
+                    <div class="bg-purple-100 dark:bg-purple-900/30 text-xs text-purple-700 dark:text-purple-400 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <GitBranch class="h-3 w-3" />
+                      <span>Routes to different steps based on conditions (no message sent)</span>
                     </div>
                   </div>
                   </div>

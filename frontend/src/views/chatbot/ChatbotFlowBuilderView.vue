@@ -45,6 +45,7 @@ import {
   Globe,
   MessageCircle,
   Users,
+  GitBranch,
   ChevronDown,
   ChevronRight,
   Save,
@@ -93,9 +94,18 @@ interface FlowStep {
   store_as: string
   next_step: string
   conditional_next?: Record<string, string>  // Button ID -> target step name
+  conditional_routes?: ConditionalRoute[]  // Operator-based routing for all steps
   retry_on_invalid: boolean
   max_retries: number
   skip_condition: string
+}
+
+interface ConditionalRoute {
+  operator: string  // ==, !=, contains, >, <, >=, <=, empty, etc.
+  value: string
+  target: string  // Target step name
+  variable?: string  // Optional: check different variable from session
+  default?: boolean  // Is this the default route
 }
 
 interface WebhookConfig {
@@ -250,6 +260,7 @@ const defaultStep: FlowStep = {
   store_as: '',
   next_step: '',
   conditional_next: {},
+  conditional_routes: [],
   retry_on_invalid: true,
   max_retries: 3,
   skip_condition: ''
@@ -269,7 +280,8 @@ function createNewStep(overrides: Partial<FlowStep> = {}): FlowStep {
     buttons: [],
     transfer_config: { ...defaultTransferConfig },
     input_config: {},
-    conditional_next: {}
+    conditional_next: {},
+    conditional_routes: []
   }
 }
 
@@ -296,6 +308,18 @@ const selectedStep = computed(() => {
 // All steps with valid names for branching dropdowns
 const stepsWithNames = computed(() => {
   return formData.value.steps.filter(s => s.step_name && s.step_name.trim() !== '')
+})
+
+// All steps with labels (name or fallback) for "Go To" dropdowns
+const stepsWithLabels = computed(() => {
+  const currentStepName = selectedStep.value?.step_name
+  return formData.value.steps
+    .map((step, idx) => ({
+      value: step.step_name || `step_${idx + 1}`,
+      label: step.step_name || `Step ${idx + 1} (${step.message_type})`,
+      originalStep: step
+    }))
+    .filter(item => item.value !== currentStepName) // Don't show current step
 })
 
 // Extract available variables for panel configuration
@@ -348,6 +372,7 @@ const unassignedVariables = computed(() => {
 const messageTypes = [
   { value: 'text', label: 'Text', icon: MessageSquare, description: 'Send a text message' },
   { value: 'buttons', label: 'Buttons', icon: MousePointerClick, description: 'Text with button options' },
+  { value: 'conditional_routing', label: 'Routing', icon: GitBranch, description: 'Route based on conditions (no message)' },
   { value: 'api_fetch', label: 'API', icon: Globe, description: 'Fetch data from API' },
   { value: 'whatsapp_flow', label: 'WA Flow', icon: MessageCircle, description: 'WhatsApp Flow form' },
   { value: 'transfer', label: 'Transfer', icon: Users, description: 'Transfer to agent' }
@@ -473,6 +498,7 @@ async function loadFlow(id: string) {
         store_as: s.store_as || s.StoreAs || '',
         next_step: s.next_step || s.NextStep || '',
         conditional_next: s.conditional_next || s.ConditionalNext || {},
+        conditional_routes: s.conditional_routes || s.ConditionalRoutes || [],
         retry_on_invalid: s.retry_on_invalid ?? s.RetryOnInvalid ?? true,
         max_retries: s.max_retries ?? s.MaxRetries ?? 3,
         skip_condition: s.skip_condition || s.SkipCondition || ''
@@ -526,7 +552,8 @@ function duplicateStep(index: number) {
     buttons: stepToDuplicate.buttons.map(btn => ({ ...btn })),
     transfer_config: { ...stepToDuplicate.transfer_config },
     input_config: { ...stepToDuplicate.input_config },
-    conditional_next: { ...stepToDuplicate.conditional_next }
+    conditional_next: { ...stepToDuplicate.conditional_next },
+    conditional_routes: stepToDuplicate.conditional_routes?.map(r => ({ ...r })) || []
   }
 
   // Insert the duplicated step right after the original
@@ -597,6 +624,14 @@ function updateStepOrders() {
 function setMessageType(type: string) {
   if (selectedStep.value) {
     selectedStep.value.message_type = type
+    // Conditional routing steps don't take input
+    if (type === 'conditional_routing') {
+      selectedStep.value.input_type = 'none'
+      // Initialize routes if empty
+      if (!selectedStep.value.conditional_routes) {
+        selectedStep.value.conditional_routes = []
+      }
+    }
   }
 }
 
@@ -684,6 +719,58 @@ function setButtonNextStep(buttonId: string, targetStep: string) {
     delete selectedStep.value.conditional_next[buttonId]
   }
 }
+
+// Conditional route helpers
+function addConditionalRoute() {
+  if (!selectedStep.value) return
+  if (!selectedStep.value.conditional_routes) {
+    selectedStep.value.conditional_routes = []
+  }
+  selectedStep.value.conditional_routes.push({
+    operator: '==',
+    value: '',
+    target: '',
+    variable: '',
+    default: false
+  })
+}
+
+function removeConditionalRoute(index: number) {
+  if (!selectedStep.value) return
+  selectedStep.value.conditional_routes?.splice(index, 1)
+}
+
+function addDefaultRoute() {
+  if (!selectedStep.value) return
+  if (!selectedStep.value.conditional_routes) {
+    selectedStep.value.conditional_routes = []
+  }
+  // Remove any existing default route
+  selectedStep.value.conditional_routes = selectedStep.value.conditional_routes.filter(r => !r.default)
+  // Add new default route
+  selectedStep.value.conditional_routes.push({
+    operator: '',
+    value: '',
+    target: '',
+    variable: '',
+    default: true
+  })
+}
+
+const operatorOptions = [
+  { value: '==', label: 'Equals (==)' },
+  { value: '!=', label: 'Not Equals (!=)' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'not_contains', label: 'Not Contains' },
+  { value: 'starts_with', label: 'Starts With' },
+  { value: 'ends_with', label: 'Ends With' },
+  { value: '>', label: 'Greater Than (>)' },
+  { value: '<', label: 'Less Than (<)' },
+  { value: '>=', label: 'Greater or Equal (>=)' },
+  { value: '<=', label: 'Less or Equal (<=)' },
+  { value: 'empty', label: 'Is Empty' },
+  { value: 'not_empty', label: 'Is Not Empty' }
+]
 
 // API header helpers
 function addHeader() {
@@ -1386,23 +1473,186 @@ function confirmCancel() {
         <!-- Step Properties -->
         <ScrollArea class="flex-1" v-else-if="selectedStep">
           <div class="p-4 space-y-4">
+            <!-- Info Panel for Conditional Routing -->
+            <div v-if="selectedStep.message_type === 'conditional_routing'" class="p-3 border rounded-lg bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+              <div class="flex items-start gap-2">
+                <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="space-y-1">
+                  <p class="text-xs font-medium text-blue-900 dark:text-blue-100">Conditional Routing Step</p>
+                  <p class="text-[10px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                    This step evaluates variables and routes to different steps without sending a message or waiting for input. 
+                    Add routing rules below to define your branching logic.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <!-- Basic Properties -->
             <div class="space-y-3">
               <div class="space-y-1.5">
                 <Label class="text-xs">Step Name</Label>
                 <Input v-model="selectedStep.step_name" placeholder="step_1" class="h-8" />
               </div>
-              <div class="space-y-1.5">
+              <!-- Store Response As (not for conditional_routing) -->
+              <div v-if="selectedStep.message_type !== 'conditional_routing'" class="space-y-1.5">
                 <Label class="text-xs">Store Response As</Label>
                 <Input v-model="selectedStep.store_as" placeholder="variable_name" class="h-8" />
                 <p class="text-xs text-muted-foreground">Variable name to store user's response</p>
+              </div>
+              
+              <!-- Go To Step (for all non-button, non-conditional steps) -->
+              <div v-if="selectedStep.message_type !== 'buttons' && selectedStep.message_type !== 'conditional_routing'" class="space-y-1.5">
+                <Label class="text-xs flex items-center justify-between">
+                  <span>Go To Step (Default)</span>
+                  <span class="text-[10px] text-muted-foreground font-normal">({{ stepsWithLabels.length }} available)</span>
+                </Label>
+                <Select :model-value="selectedStep.next_step || '__sequential__'" @update:model-value="selectedStep.next_step = $event === '__sequential__' ? '' : $event">
+                  <SelectTrigger class="h-8 text-xs">
+                    <SelectValue placeholder="Next step (sequential)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__sequential__">Next step (sequential)</SelectItem>
+                    <SelectItem
+                      v-for="(step, idx) in stepsWithLabels"
+                      :key="`goto-${idx}`"
+                      :value="step.value"
+                    >
+                      {{ step.label }}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p class="text-xs text-muted-foreground">
+                  Default step when no conditions match
+                </p>
+              </div>
+
+              <!-- Conditional Routes (for conditional_routing step type OR api_fetch with mapping) -->
+              <div v-if="selectedStep.message_type === 'conditional_routing'" class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <Label class="text-xs font-medium">Routing Rules</Label>
+                  <div class="flex gap-1">
+                    <Button variant="outline" size="sm" class="h-6 text-xs" @click="addConditionalRoute">
+                      <Plus class="h-3 w-3 mr-1" />
+                      Add Condition
+                    </Button>
+                    <Button 
+                      v-if="!selectedStep.conditional_routes?.some(r => r.default)" 
+                      variant="outline" 
+                      size="sm" 
+                      class="h-6 text-xs" 
+                      @click="addDefaultRoute"
+                    >
+                      <Plus class="h-3 w-3 mr-1" />
+                      Add Default
+                    </Button>
+                  </div>
+                </div>
+                <p class="text-[10px] text-muted-foreground">
+                  This step evaluates conditions and routes to different steps without sending a message.
+                </p>
+
+                <div v-if="selectedStep.conditional_routes && selectedStep.conditional_routes.length > 0" class="space-y-2">
+                  <div v-for="(route, idx) in selectedStep.conditional_routes" :key="idx" class="p-2 border rounded-md bg-muted/30 space-y-2">
+                    <div v-if="!route.default" class="space-y-2">
+                      <div class="flex items-center gap-2">
+                        <Badge variant="secondary" class="text-[10px] px-1.5">Route {{ idx + 1 }}</Badge>
+                        <span class="text-xs text-muted-foreground">If condition matches:</span>
+                        <Button variant="ghost" size="icon" class="h-6 w-6 ml-auto" @click="removeConditionalRoute(idx)">
+                          <Trash2 class="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                      
+                      <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1">
+                          <Label class="text-[10px] text-muted-foreground">Operator</Label>
+                          <Select v-model="route.operator">
+                            <SelectTrigger class="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem v-for="op in operatorOptions" :key="op.value" :value="op.value">
+                                {{ op.label }}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div v-if="!['empty', 'not_empty'].includes(route.operator)" class="space-y-1">
+                          <Label class="text-[10px] text-muted-foreground">Value</Label>
+                          <Input v-model="route.value" placeholder="Enter value" class="h-7 text-xs" />
+                        </div>
+                      </div>
+
+                      <div class="space-y-1">
+                        <Label class="text-[10px] text-muted-foreground">Then Go To Step</Label>
+                        <Select v-model="route.target">
+                          <SelectTrigger class="h-7 text-xs">
+                            <SelectValue placeholder="Select target step" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              v-for="(step, stepIdx) in stepsWithLabels"
+                              :key="`route-${idx}-${stepIdx}`"
+                              :value="step.value"
+                            >
+                              {{ step.label }}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div class="space-y-1">
+                        <Label class="text-[10px] text-muted-foreground">Variable to Check</Label>
+                        <Input 
+                          v-model="route.variable" 
+                          placeholder="e.g., age, status, phone_number" 
+                          class="h-7 text-xs" 
+                        />
+                        <p class="text-[9px] text-muted-foreground">
+                          Variable name from session data (without {{}})
+                        </p>
+                      </div>
+                    </div>
+
+                    <div v-else class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <Badge variant="outline" class="text-[10px] px-1.5">Default</Badge>
+                        <span class="text-xs">Go to:</span>
+                        <Select v-model="route.target">
+                          <SelectTrigger class="h-7 text-xs w-[200px]">
+                            <SelectValue placeholder="Select step" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__sequential__">Next step (sequential)</SelectItem>
+                            <SelectItem
+                              v-for="(step, stepIdx) in stepsWithLabels"
+                              :key="`default-${stepIdx}`"
+                              :value="step.value"
+                            >
+                              {{ step.label }}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button variant="ghost" size="icon" class="h-6 w-6" @click="removeConditionalRoute(idx)">
+                        <Trash2 class="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="text-[10px] text-muted-foreground">
+                  Routes are evaluated in order. First matching condition determines the next step. Add a default route as fallback.
+                </p>
               </div>
             </div>
 
             <Separator />
 
-            <!-- Message Configuration -->
-            <Collapsible v-model:open="messagesOpen">
+            <!-- Message Configuration (hidden for conditional_routing) -->
+            <Collapsible v-if="selectedStep.message_type !== 'conditional_routing'" v-model:open="messagesOpen">
               <CollapsibleTrigger class="flex items-center justify-between w-full py-1 text-sm font-medium">
                 Message
                 <component :is="messagesOpen ? ChevronDown : ChevronRight" class="h-4 w-4" />
@@ -1469,11 +1719,11 @@ function confirmCancel() {
                               <SelectContent>
                                 <SelectItem value="__default__">Next step (sequential)</SelectItem>
                                 <SelectItem
-                                  v-for="step in stepsWithNames"
-                                  :key="`goto-${step.step_name}`"
-                                  :value="step.step_name"
+                                  v-for="(step, stepIdx) in stepsWithLabels"
+                                  :key="`goto-btn-${stepIdx}`"
+                                  :value="step.value"
                                 >
-                                  {{ step.step_name }}
+                                  {{ step.label }}
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -1647,10 +1897,10 @@ function confirmCancel() {
               </CollapsibleContent>
             </Collapsible>
 
-            <Separator v-if="selectedStep.message_type !== 'transfer'" />
+            <Separator v-if="selectedStep.message_type !== 'transfer' && selectedStep.message_type !== 'conditional_routing'" />
 
-            <!-- Input Configuration (not for transfer) -->
-            <Collapsible v-if="selectedStep.message_type !== 'transfer'" v-model:open="inputOpen">
+            <!-- Input Configuration (not for transfer or conditional_routing) -->
+            <Collapsible v-if="selectedStep.message_type !== 'transfer' && selectedStep.message_type !== 'conditional_routing'" v-model:open="inputOpen">
               <CollapsibleTrigger class="flex items-center justify-between w-full py-1 text-sm font-medium">
                 Input
                 <component :is="inputOpen ? ChevronDown : ChevronRight" class="h-4 w-4" />
