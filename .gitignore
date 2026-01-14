@@ -43,6 +43,7 @@ internal/frontend/dist/*
 # Logs
 *.log
 logs/
+build-errors.log
 
 # Temp files
 tmp/

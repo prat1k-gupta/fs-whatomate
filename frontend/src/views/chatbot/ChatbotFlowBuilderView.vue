@@ -38,6 +38,7 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
+  Copy,
   GripVertical,
   MessageSquare,
   MousePointerClick,
@@ -254,6 +255,24 @@ const defaultStep: FlowStep = {
   skip_condition: ''
 }
 
+// Helper function to create a new step with properly deep-cloned nested objects
+function createNewStep(overrides: Partial<FlowStep> = {}): FlowStep {
+  return {
+    ...defaultStep,
+    ...overrides,
+    // Always create fresh nested objects to avoid reference sharing
+    api_config: {
+      ...defaultApiConfig,
+      headers: {},
+      response_mapping: {}
+    },
+    buttons: [],
+    transfer_config: { ...defaultTransferConfig },
+    input_config: {},
+    conditional_next: {}
+  }
+}
+
 const formData = ref({
   name: '',
   description: '',
@@ -368,13 +387,12 @@ onMounted(async () => {
     await loadFlow(flowId.value)
   } else {
     // Initialize with one default step
-    formData.value.steps = [{
-      ...defaultStep,
+    formData.value.steps = [createNewStep({
       step_name: 'step_1',
       step_order: 1,
       message: 'What is your name?',
       store_as: 'name'
-    }]
+    })]
     isLoading.value = false
   }
   // Default to Flow Settings view
@@ -472,12 +490,55 @@ async function loadFlow(id: string) {
 
 function addStep() {
   const newOrder = formData.value.steps.length + 1
-  formData.value.steps.push({
-    ...defaultStep,
+  formData.value.steps.push(createNewStep({
     step_name: `step_${newOrder}`,
-    step_order: newOrder,
-  })
+    step_order: newOrder
+  }))
   selectedStepIndex.value = formData.value.steps.length - 1
+}
+
+function duplicateStep(index: number) {
+  const stepToDuplicate = formData.value.steps[index]
+  if (!stepToDuplicate) return
+
+  // Generate a unique step name
+  const baseName = stepToDuplicate.step_name.replace(/_copy.*$/, '')
+  let copyNumber = 1
+  let newStepName = `${baseName}_copy`
+  
+  while (formData.value.steps.some(s => s.step_name === newStepName)) {
+    copyNumber++
+    newStepName = `${baseName}_copy${copyNumber}`
+  }
+
+  // Deep clone the step with all nested objects
+  const duplicatedStep: FlowStep = {
+    ...stepToDuplicate,
+    id: undefined, // Remove ID so backend creates a new one
+    step_name: newStepName,
+    step_order: stepToDuplicate.step_order + 1,
+    // Deep clone all nested objects to avoid reference sharing
+    api_config: {
+      ...stepToDuplicate.api_config,
+      headers: { ...stepToDuplicate.api_config.headers },
+      response_mapping: { ...stepToDuplicate.api_config.response_mapping }
+    },
+    buttons: stepToDuplicate.buttons.map(btn => ({ ...btn })),
+    transfer_config: { ...stepToDuplicate.transfer_config },
+    input_config: { ...stepToDuplicate.input_config },
+    conditional_next: { ...stepToDuplicate.conditional_next }
+  }
+
+  // Insert the duplicated step right after the original
+  formData.value.steps.splice(index + 1, 0, duplicatedStep)
+  
+  // Update step orders for all steps
+  updateStepOrders()
+  
+  // Select the newly duplicated step
+  selectedStepIndex.value = index + 1
+  
+  toast.success('Step duplicated')
 }
 
 function selectStep(index: number) {
@@ -914,30 +975,45 @@ function confirmCancel() {
               <template #item="{ element: step, index }">
                 <div
                   :class="[
-                    'group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors',
+                    'group flex flex-col gap-1 p-2 rounded-md cursor-pointer transition-colors',
                     selectedStepIndex === index ? 'bg-primary/10 border border-primary/20' : 'hover:bg-muted'
                   ]"
                   @click="selectStep(index)"
                 >
-                  <GripVertical class="h-4 w-4 text-muted-foreground cursor-grab drag-handle flex-shrink-0" />
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                      <Badge variant="outline" class="font-mono text-xs px-1.5">{{ index + 1 }}</Badge>
-                      <span class="text-sm font-medium truncate">{{ step.step_name || `Step ${index + 1}` }}</span>
-                    </div>
-                    <div class="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                  <!-- First row: Number badge and step name -->
+                  <div class="flex items-center gap-2 min-w-0">
+                    <GripVertical class="h-4 w-4 text-muted-foreground cursor-grab drag-handle flex-shrink-0" />
+                    <Badge variant="outline" class="font-mono text-xs px-1.5 flex-shrink-0">{{ index + 1 }}</Badge>
+                    <span class="text-sm font-medium truncate flex-1">{{ step.step_name || `Step ${index + 1}` }}</span>
+                  </div>
+                  
+                  <!-- Second row: Type badge and action buttons -->
+                  <div class="flex items-center gap-2 ml-6">
+                    <div class="flex items-center gap-1 text-xs text-muted-foreground">
                       <component :is="getStepIcon(step.message_type)" class="h-3 w-3" />
                       <span>{{ getStepLabel(step.message_type) }}</span>
                     </div>
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-6 w-6"
+                        @click.stop="duplicateStep(index)"
+                        title="Duplicate step"
+                      >
+                        <Copy class="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-6 w-6 text-destructive"
+                        @click.stop="confirmDeleteStep(index)"
+                        title="Delete step"
+                      >
+                        <Trash2 class="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="h-7 w-7 opacity-0 group-hover:opacity-100 text-destructive flex-shrink-0"
-                    @click.stop="confirmDeleteStep(index)"
-                  >
-                    <Trash2 class="h-4 w-4" />
-                  </Button>
                 </div>
               </template>
             </draggable>

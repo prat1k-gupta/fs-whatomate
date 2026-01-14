@@ -1,11 +1,10 @@
 services:
-  # Whatomate app
+  # Whatomate app (Development with hot reloading)
   app:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
-    image: shridh0r/whatomate:latest
-    container_name: whatomate_app
+      dockerfile: docker/Dockerfile.dev
+    container_name: whatomate_app_dev
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -17,14 +16,34 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./uploads:/app/uploads:rw
+      # Mount source code for hot reloading
+      - ..:/app:rw
+      - /app/tmp  # Exclude tmp directory from sync
       - ../config.toml:/app/config.toml:ro
-    command: ["server", "-migrate", "-config", "/app/config.toml"]
+    environment:
+      - CGO_ENABLED=0
+      - GOOS=linux
+
+  # Frontend (Development with Vite hot reloading)
+  frontend:
+    image: node:20-alpine
+    container_name: whatomate_frontend_dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    networks:
+      - whatomate
+    volumes:
+      - ../frontend:/app:rw
+      - /app/node_modules  # Use container's node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    environment:
+      - VITE_API_URL=http://localhost:8080
 
   # PostgreSQL database
   db:
     image: postgres:17-alpine
-    container_name: whatomate_db
+    container_name: whatomate_db_dev
     restart: unless-stopped
     networks:
       - whatomate
@@ -40,12 +59,12 @@ services:
       timeout: 5s
       retries: 6
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data-dev:/var/lib/postgresql/data
 
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: whatomate_redis
+    container_name: whatomate_redis_dev
     restart: unless-stopped
     networks:
       - whatomate
@@ -57,11 +76,11 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - redis-data:/data
+      - redis-data-dev:/data
 
 networks:
   whatomate:
 
 volumes:
-  postgres-data:
-  redis-data:
+  postgres-data-dev:
+  redis-data-dev:

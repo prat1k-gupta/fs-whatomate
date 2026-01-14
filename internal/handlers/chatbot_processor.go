@@ -890,9 +890,11 @@ func (a *App) getOrCreateSession(orgID, contactID uuid.UUID, accountName, phoneN
 		WhatsAppAccount: accountName,
 		PhoneNumber:     phoneNumber,
 		Status:          models.SessionStatusActive,
-		SessionData:     models.JSONB{},
-		StartedAt:       now,
-		LastActivityAt:  now,
+		SessionData: models.JSONB{
+			"phone_number": phoneNumber,
+		},
+		StartedAt:      now,
+		LastActivityAt: now,
 	}
 	if err := a.DB.Create(&session).Error; err != nil {
 		a.Log.Error("Failed to create session", "error", err)
@@ -949,8 +951,9 @@ func (a *App) startFlow(account *models.WhatsAppAccount, session *models.Chatbot
 	session.CurrentStep = ""
 	session.StepRetries = 0
 	session.SessionData = models.JSONB{
-		"_flow_id":   flow.ID.String(),
-		"_flow_name": flow.Name,
+		"_flow_id":     flow.ID.String(),
+		"_flow_name":   flow.Name,
+		"phone_number": session.PhoneNumber,
 	}
 	a.DB.Save(session)
 
@@ -1490,15 +1493,15 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 			}
 
 			// Check if API returned buttons
-			if len(apiResp.Buttons) > 0 {
-				if err := a.sendAndSaveInteractiveButtons(account, contact, message, apiResp.Buttons); err != nil {
-					a.Log.Error("Failed to send API response buttons", "error", err, "contact", contact.PhoneNumber)
-				}
-			} else {
-				if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-					a.Log.Error("Failed to send API response message", "error", err, "contact", contact.PhoneNumber)
-				}
-			}
+			// if len(apiResp.Buttons) > 0 {
+			// 	if err := a.sendAndSaveInteractiveButtons(account, contact, message, apiResp.Buttons); err != nil {
+			// 		a.Log.Error("Failed to send API response buttons", "error", err, "contact", contact.PhoneNumber)
+			// 	}
+			// } else {
+			// 	if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
+			// 		a.Log.Error("Failed to send API response message", "error", err, "contact", contact.PhoneNumber)
+			// 	}
+			// }
 		}
 		a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
 
@@ -2539,7 +2542,7 @@ func (a *App) isWithinBusinessHours(businessHours models.JSONBArray) bool {
 	return false
 }
 
-// shouldSkipStep evaluates a text expression like "(status == 'vip' OR amount > 100) AND name != ''"
+// shouldSkipStep evaluates a text expression like "(status == 'vip' OR amount > 100) AND name != ”"
 func (a *App) shouldSkipStep(step *models.ChatbotFlowStep, sessionData map[string]interface{}) bool {
 	if step.SkipCondition == "" {
 		a.Log.Debug("No skip condition for step", "step", step.StepName)
@@ -2630,7 +2633,7 @@ func splitByLogicOperator(expr, op string) []string {
 	return parts
 }
 
-// evaluateSingleCondition handles: phone != '' or age > 18 or status == 'confirmed'
+// evaluateSingleCondition handles: phone != ” or age > 18 or status == 'confirmed'
 func evaluateSingleCondition(expr string, data map[string]interface{}) bool {
 	expr = strings.TrimSpace(expr)
 
