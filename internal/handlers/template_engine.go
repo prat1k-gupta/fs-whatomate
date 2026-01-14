@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -158,6 +159,44 @@ func processVariables(template string, data map[string]interface{}) string {
 		value := getNestedValue(data, path)
 		return formatValue(value)
 	})
+}
+
+// processURLTemplate processes a URL template with proper URL encoding for variables
+// This should be used specifically for API URLs to ensure query parameters are properly encoded
+func processURLTemplate(urlTemplate string, data map[string]interface{}) string {
+	if data == nil {
+		return urlTemplate
+	}
+
+	// Split URL into base and query parts manually to handle template variables correctly
+	queryStart := strings.Index(urlTemplate, "?")
+	
+	if queryStart == -1 {
+		// No query parameters, just process normally (for path variables)
+		return processTemplate(urlTemplate, data)
+	}
+
+	// Separate base URL and query string
+	baseURL := urlTemplate[:queryStart]
+	queryTemplate := urlTemplate[queryStart+1:]
+
+	// Process base URL normally (path segments)
+	processedBase := processTemplate(baseURL, data)
+
+	// Process query string with URL encoding
+	processedQuery := variablePattern.ReplaceAllStringFunc(queryTemplate, func(match string) string {
+		// Remove {{ and }}
+		path := match[2 : len(match)-2]
+		
+		value := getNestedValue(data, path)
+		strValue := formatValue(value)
+		
+		// Use QueryEscape to properly encode the value
+		return url.QueryEscape(strValue)
+	})
+
+	// Reconstruct the full URL
+	return processedBase + "?" + processedQuery
 }
 
 // getNestedValue extracts a value from nested maps/arrays using dot notation

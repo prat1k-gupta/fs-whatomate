@@ -1231,8 +1231,8 @@ func (a *App) sendFlowCompletionWebhook(flow *models.ChatbotFlow, session *model
 		return
 	}
 
-	// Replace variables in URL
-	webhookURL = a.replaceVariables(webhookURL, session.SessionData)
+	// Replace variables in URL with proper URL encoding
+	webhookURL = processURLTemplate(webhookURL, session.SessionData)
 
 	// Get HTTP method (default: POST)
 	method := "POST"
@@ -1694,8 +1694,10 @@ func (a *App) fetchApiResponse(apiConfig models.JSONB, sessionData models.JSONB,
 		return nil, fmt.Errorf("API URL is required")
 	}
 
-	// Replace variables in URL using template engine
-	apiURL = processTemplate(apiURL, sessionData)
+	// Replace variables in URL using URL-aware template engine (with proper encoding)
+	originalURL := apiURL
+	apiURL = processURLTemplate(apiURL, sessionData)
+	a.Log.Info("API URL processed", "original", originalURL, "processed", apiURL)
 
 	// Get HTTP method (default: GET)
 	method := "GET"
@@ -1911,8 +1913,8 @@ func (a *App) fetchAPIContext(apiConfig models.JSONB, session *models.ChatbotSes
 		sessionData["user_message"] = userMessage
 	}
 
-	// Replace variables in URL
-	apiURL = a.replaceVariables(apiURL, sessionData)
+	// Replace variables in URL with proper URL encoding
+	apiURL = processURLTemplate(apiURL, sessionData)
 
 	// Get HTTP method (default: GET)
 	method := "GET"
