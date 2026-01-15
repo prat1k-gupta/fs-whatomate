@@ -515,12 +515,28 @@ async function loadFlow(id: string) {
 }
 
 function addStep() {
+  // Determine where to insert the new step
+  let insertIndex = formData.value.steps.length // Default: end of list
+  
+  if (selectedStepIndex.value !== null) {
+    // Insert after the currently selected step
+    insertIndex = selectedStepIndex.value + 1
+  }
+  
   const newOrder = formData.value.steps.length + 1
-  formData.value.steps.push(createNewStep({
+  const newStep = createNewStep({
     step_name: `step_${newOrder}`,
     step_order: newOrder
-  }))
-  selectedStepIndex.value = formData.value.steps.length - 1
+  })
+  
+  // Insert the step at the determined position
+  formData.value.steps.splice(insertIndex, 0, newStep)
+  
+  // Update step orders for all steps
+  updateStepOrders()
+  
+  // Select the newly added step
+  selectedStepIndex.value = insertIndex
 }
 
 function duplicateStep(index: number) {
@@ -1514,6 +1530,7 @@ function confirmCancel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__sequential__">Next step (sequential)</SelectItem>
+                    <SelectItem value="__complete__">Complete Flow</SelectItem>
                     <SelectItem
                       v-for="(step, idx) in stepsWithLabels"
                       :key="`goto-${idx}`"
@@ -1592,6 +1609,7 @@ function confirmCancel() {
                             <SelectValue placeholder="Select target step" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="__complete__">Complete Flow ✓</SelectItem>
                             <SelectItem
                               v-for="(step, stepIdx) in stepsWithLabels"
                               :key="`route-${idx}-${stepIdx}`"
@@ -1626,6 +1644,7 @@ function confirmCancel() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__sequential__">Next step (sequential)</SelectItem>
+                            <SelectItem value="__complete__">Complete Flow ✓</SelectItem>
                             <SelectItem
                               v-for="(step, stepIdx) in stepsWithLabels"
                               :key="`default-${stepIdx}`"
@@ -1718,6 +1737,7 @@ function confirmCancel() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="__default__">Next step (sequential)</SelectItem>
+                                <SelectItem value="__complete__">Complete Flow ✓</SelectItem>
                                 <SelectItem
                                   v-for="(step, stepIdx) in stepsWithLabels"
                                   :key="`goto-btn-${stepIdx}`"

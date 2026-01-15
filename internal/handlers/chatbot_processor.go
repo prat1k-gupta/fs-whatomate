@@ -1125,6 +1125,19 @@ func (a *App) processFlowResponse(account *models.WhatsAppAccount, session *mode
 
 	// Determine next step
 	nextStepName := currentStep.NextStep
+	
+	// Check for special __complete__ value (explicit flow completion)
+	if nextStepName == "__complete__" {
+		a.Log.Info("Explicit flow completion requested via next_step", "step", currentStep.StepName)
+		a.completeFlow(account, session, contact, flow)
+		return
+	}
+	
+	// Check for __sequential__ (means use next in order, not a step name)
+	if nextStepName == "__sequential__" {
+		nextStepName = ""
+	}
+	
 	if nextStepName == "" && currentStepIndex+1 < len(flow.Steps) {
 		nextStepName = flow.Steps[currentStepIndex+1].StepName
 	}
@@ -1133,8 +1146,20 @@ func (a *App) processFlowResponse(account *models.WhatsAppAccount, session *mode
 	if len(currentStep.ConditionalRoutes) > 0 {
 		routedStep := a.evaluateConditionalRoutes(currentStep.ConditionalRoutes, userInput, session.SessionData)
 		if routedStep != "" {
-			nextStepName = routedStep
-			a.Log.Info("Conditional route matched", "route_target", routedStep, "user_input", userInput)
+			// Check for special __complete__ value in conditional routes
+			if routedStep == "__complete__" {
+				a.Log.Info("Explicit flow completion requested via conditional route", "step", currentStep.StepName)
+				a.completeFlow(account, session, contact, flow)
+				return
+			}
+			// Check for __sequential__ (means use normal next step logic)
+			if routedStep == "__sequential__" {
+				routedStep = ""
+				a.Log.Info("Conditional route returned __sequential__, using normal flow", "step", currentStep.StepName)
+			} else {
+				nextStepName = routedStep
+				a.Log.Info("Conditional route matched", "route_target", routedStep, "user_input", userInput)
+			}
 		}
 	}
 
@@ -1157,10 +1182,24 @@ func (a *App) processFlowResponse(account *models.WhatsAppAccount, session *mode
 				nextStepName = defaultNext
 			}
 		}
+		
+		// Check for special values in button routing
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion requested via button routing", "button_id", buttonID, "step", currentStep.StepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+		if nextStepName == "__sequential__" || nextStepName == "__default__" {
+			// __sequential__ or __default__ means use normal flow (not a step name)
+			nextStepName = ""
+		}
 	}
 
 	// Move to next step or complete flow
-	if nextStepName == "" {
+	if nextStepName == "" || nextStepName == "__complete__" {
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion requested", "step", currentStep.StepName)
+		}
 		a.completeFlow(account, session, contact, flow)
 		return
 	}
@@ -1380,6 +1419,19 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 
 		// Find next step
 		nextStepName := step.NextStep
+		
+		// Check for explicit completion
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion during skip", "step", step.StepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+		
+		// Handle __sequential__ (means use next in order)
+		if nextStepName == "__sequential__" {
+			nextStepName = ""
+		}
+		
 		if nextStepName == "" {
 			// Find by step order
 			for i, s := range flow.Steps {
@@ -1390,8 +1442,8 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 			}
 		}
 
-		if nextStepName == "" {
-			// No next step, complete flow
+		if nextStepName == "" || nextStepName == "__complete__" {
+			// No next step or explicit completion
 			a.completeFlow(account, session, contact, flow)
 			return
 		}
@@ -1430,9 +1482,37 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 			nextStepName = a.evaluateConditionalRoutes(step.ConditionalRoutes, "", session.SessionData)
 		}
 
-		// Fall back to next_step if no route matched
+		a.Log.Info("Conditional route result", "next_step_name", nextStepName)
+
+		// Check for explicit flow completion
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion requested via conditional routing step", "step", step.StepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+
+		// Check for __sequential__ (means use next in order, not a step name)
+		if nextStepName == "__sequential__" || nextStepName == "" {
+			a.Log.Info("Using sequential flow", "step", step.StepName, "was_empty", nextStepName == "")
+			nextStepName = ""
+		}
+
+		// Fall back to next_step if no route matched or was sequential
 		if nextStepName == "" {
 			nextStepName = step.NextStep
+			a.Log.Info("Using next_step from step config", "next_step", nextStepName)
+		}
+
+		// Check for explicit completion in next_step
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion requested via next_step in conditional routing", "step", step.StepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+
+		// Check for __sequential__ in next_step
+		if nextStepName == "__sequential__" {
+			nextStepName = ""
 		}
 
 		// Fall back to sequential if still empty
@@ -1440,6 +1520,7 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 			for i, s := range flow.Steps {
 				if s.StepName == step.StepName && i+1 < len(flow.Steps) {
 					nextStepName = flow.Steps[i+1].StepName
+					a.Log.Info("Found sequential next step", "next_step", nextStepName, "current_index", i)
 					break
 				}
 			}
@@ -1483,6 +1564,19 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 
 		// Find next step
 		nextStepName := step.NextStep
+		
+		// Check for explicit completion
+		if nextStepName == "__complete__" {
+			a.Log.Info("Explicit flow completion from no-input step", "step", step.StepName)
+			a.completeFlow(account, session, contact, flow)
+			return
+		}
+		
+		// Handle __sequential__ (means use next in order)
+		if nextStepName == "__sequential__" {
+			nextStepName = ""
+		}
+		
 		if nextStepName == "" {
 			// Find by step order
 			for i, s := range flow.Steps {
@@ -1493,8 +1587,8 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 			}
 		}
 
-		if nextStepName == "" {
-			// No next step, complete flow
+		if nextStepName == "" || nextStepName == "__complete__" {
+			// No next step or explicit completion
 			a.completeFlow(account, session, contact, flow)
 			return
 		}
@@ -1707,14 +1801,17 @@ func (a *App) fetchApiResponse(apiConfig models.JSONB, sessionData models.JSONB,
 
 	// Prepare request body if configured
 	var bodyReader io.Reader
+	var requestBody string
 	if bodyTemplate, ok := apiConfig["body"].(string); ok && bodyTemplate != "" {
 		bodyWithVars := processTemplate(bodyTemplate, sessionData)
+		requestBody = bodyWithVars
 		bodyReader = strings.NewReader(bodyWithVars)
 	}
 
 	// Create request
 	req, err := http.NewRequest(method, apiURL, bodyReader)
 	if err != nil {
+		a.Log.Error("Failed to create HTTP request", "error", err, "method", method, "url", apiURL)
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -1723,19 +1820,41 @@ func (a *App) fetchApiResponse(apiConfig models.JSONB, sessionData models.JSONB,
 	req.Header.Set("Accept", "application/json")
 
 	// Add custom headers if configured
+	requestHeaders := make(map[string]string)
+	requestHeaders["Content-Type"] = "application/json"
+	requestHeaders["Accept"] = "application/json"
+	
 	if headers, ok := apiConfig["headers"].(map[string]interface{}); ok {
 		for key, value := range headers {
 			if strVal, ok := value.(string); ok {
 				// Replace variables in header values
-				req.Header.Set(key, processTemplate(strVal, sessionData))
+				processedHeader := processTemplate(strVal, sessionData)
+				req.Header.Set(key, processedHeader)
+				requestHeaders[key] = processedHeader
 			}
 		}
 	}
+
+	// Log the complete request details before making the call
+	a.Log.Info("Making API request", 
+		"method", method,
+		"url", apiURL,
+		"headers", requestHeaders,
+		"body", requestBody,
+		"session_data", sessionData,
+	)
 
 	// Make the request
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		a.Log.Error("API request network error",
+			"error", err,
+			"method", method,
+			"url", apiURL,
+			"body", requestBody,
+			"headers", requestHeaders,
+		)
 		return nil, fmt.Errorf("API request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -1744,12 +1863,35 @@ func (a *App) fetchApiResponse(apiConfig models.JSONB, sessionData models.JSONB,
 	limitReader := io.LimitReader(resp.Body, 1024*1024)
 	respBody, err := io.ReadAll(limitReader)
 	if err != nil {
+		a.Log.Error("Failed to read API response body",
+			"error", err,
+			"method", method,
+			"url", apiURL,
+			"status_code", resp.StatusCode,
+		)
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		a.Log.Error("API returned error status",
+			"status_code", resp.StatusCode,
+			"method", method,
+			"url", apiURL,
+			"request_body", requestBody,
+			"request_headers", requestHeaders,
+			"response_body", string(respBody),
+			"session_data", sessionData,
+		)
 		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
+	
+	// Log successful response
+	a.Log.Info("API request successful",
+		"status_code", resp.StatusCode,
+		"method", method,
+		"url", apiURL,
+		"response_length", len(respBody),
+	)
 
 	// Parse JSON response
 	var jsonResp map[string]interface{}
@@ -2795,6 +2937,7 @@ func (a *App) evaluateConditionalRoutes(routes []interface{}, userInput string, 
 		if isDefault, ok := route["default"].(bool); ok && isDefault {
 			if target, ok := route["target"].(string); ok {
 				a.Log.Info("Default route matched", "target", target)
+				// Return the target as-is (including __sequential__ or __complete__)
 				return target
 			}
 			a.Log.Warn("Default route has no target", "route", route)
