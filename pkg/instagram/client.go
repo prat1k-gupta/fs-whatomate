@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"strings"
 	"time"
 
 	"github.com/zerodha/logf"
@@ -116,18 +118,62 @@ func (c *Client) buildMessagesURL(account *Account) string {
 
 // GetUserProfile retrieves a user's profile information
 func (c *Client) GetUserProfile(ctx context.Context, account *Account, userID string) (*UserProfile, error) {
-	url := fmt.Sprintf("%s/%s/%s?fields=name,profile_pic,username,follower_count,is_verified_user,is_user_following",
-		c.getBaseURL(), account.APIVersion, userID)
+	// Trim whitespace from access token
+	cleanToken := strings.TrimSpace(account.AccessToken)
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil, account.AccessToken)
+	// Determine the correct API base URL based on token type
+	// Instagram User Access Tokens (start with "IG") use graph.instagram.com
+	// Page Access Tokens (start with "EAA") use graph.facebook.com
+	apiBase := c.getBaseURL() // defaults to graph.facebook.com
+	if strings.HasPrefix(cleanToken, "IG") {
+		apiBase = "https://graph.instagram.com"
+	}
+
+	// Build URL with proper query encoding
+	// Use only basic fields that are available without extra permissions
+	baseURL := fmt.Sprintf("%s/%s/%s", apiBase, account.APIVersion, userID)
+	params := neturl.Values{}
+	params.Set("fields", "id,name,username")
+	params.Set("access_token", cleanToken)
+	fullURL := baseURL + "?" + params.Encode()
+
+	c.Log.Info("Fetching Instagram user profile", "user_id", userID, "api_version", account.APIVersion, "api_base", apiBase, "token_length", len(cleanToken))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		c.Log.Error("Failed to fetch Instagram user profile", "error", err)
 		return nil, fmt.Errorf("failed to get user profile: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	c.Log.Info("Instagram user profile response", "status", resp.StatusCode, "response", string(respBody))
+
+	if resp.StatusCode != http.StatusOK {
+		var apiErr MetaAPIError
+		if err := json.Unmarshal(respBody, &apiErr); err == nil && apiErr.Error.Message != "" {
+			c.Log.Error("Instagram API error", "code", apiErr.Error.Code, "message", apiErr.Error.Message)
+			return nil, fmt.Errorf("API error %d: %s (code: %d)", resp.StatusCode, apiErr.Error.Message, apiErr.Error.Code)
+		}
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var profile UserProfile
 	if err := json.Unmarshal(respBody, &profile); err != nil {
+		c.Log.Error("Failed to parse Instagram user profile", "error", err, "response", string(respBody))
 		return nil, fmt.Errorf("failed to parse user profile: %w", err)
 	}
+
+	c.Log.Info("Parsed Instagram user profile", "id", profile.ID, "name", profile.Name, "username", profile.Username)
 
 	return &profile, nil
 }
@@ -150,7 +196,7 @@ func (c *Client) DownloadMedia(ctx context.Context, mediaURL string) ([]byte, st
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read media content: %w", err)

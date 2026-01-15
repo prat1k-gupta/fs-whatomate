@@ -47,15 +47,22 @@ func (a *App) InstagramWebhookVerify(r *fastglue.Request) error {
 
 // InstagramWebhookHandler processes incoming webhook events from Meta for Instagram
 func (a *App) InstagramWebhookHandler(r *fastglue.Request) error {
+	// Log raw request body for debugging
+	rawBody := string(r.RequestCtx.PostBody())
+	a.Log.Info("Instagram webhook received", "raw_body", rawBody)
+
 	payload, err := instagram.ParseWebhook(r.RequestCtx.PostBody())
 	if err != nil {
-		a.Log.Error("Failed to parse Instagram webhook payload", "error", err)
+		a.Log.Error("Failed to parse Instagram webhook payload", "error", err, "raw_body", rawBody)
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid payload", nil, "")
 	}
+
+	a.Log.Info("Instagram webhook parsed", "object", payload.Object, "entries_count", len(payload.Entry))
 
 	// Process each entry
 	for _, entry := range payload.Entry {
 		pageID := entry.ID // The entry ID is the Page ID
+		a.Log.Info("Processing Instagram entry", "page_id", pageID, "messaging_count", len(entry.Messaging))
 
 		// Find the Instagram account by page ID
 		account, err := a.getInstagramAccountByPageIDCached(pageID)
@@ -63,6 +70,7 @@ func (a *App) InstagramWebhookHandler(r *fastglue.Request) error {
 			a.Log.Error("Instagram account not found for page", "page_id", pageID, "error", err)
 			continue
 		}
+		a.Log.Info("Found Instagram account", "account_name", account.Name, "instagram_account_id", account.InstagramAccountID)
 
 		// Process messaging events
 		for _, messaging := range entry.Messaging {
@@ -128,7 +136,7 @@ func (a *App) processInstagramMessage(account *models.InstagramAccount, messagin
 	}
 
 	// Get or create contact
-	contact, isNewContact := a.getOrCreateInstagramContact(account.OrganizationID, senderID, account.Name)
+	contact, isNewContact := a.getOrCreateInstagramContact(account, senderID)
 
 	// Dispatch webhook if new contact was created
 	if isNewContact {
@@ -259,7 +267,7 @@ func (a *App) processInstagramReaction(account *models.InstagramAccount, messagi
 	}
 
 	// Get or create contact (for reaction sender)
-	contact, _ := a.getOrCreateInstagramContact(account.OrganizationID, senderID, account.Name)
+	contact, _ := a.getOrCreateInstagramContact(account, senderID)
 
 	// Update message metadata with reaction
 	if message.Metadata == nil {
@@ -311,63 +319,106 @@ func (a *App) processInstagramReaction(account *models.InstagramAccount, messagi
 }
 
 // getOrCreateInstagramContact gets or creates an Instagram contact
-func (a *App) getOrCreateInstagramContact(orgID uuid.UUID, igsID, accountName string) (*models.Contact, bool) {
+func (a *App) getOrCreateInstagramContact(igAccount *models.InstagramAccount, igsID string) (*models.Contact, bool) {
+	a.Log.Info("getOrCreateInstagramContact called",
+		"org_id", igAccount.OrganizationID,
+		"igsid", igsID,
+		"account_name", igAccount.Name,
+		"instagram_account_id", igAccount.InstagramAccountID,
+		"page_id", igAccount.PageID,
+	)
+
 	var contact models.Contact
-	
+
 	// Try to find existing contact by IGSID and account
 	err := a.DB.Where(
 		"organization_id = ? AND channel = ? AND channel_identifier = ? AND instagram_account = ?",
-		orgID, models.ChannelInstagram, igsID, accountName,
+		igAccount.OrganizationID, models.ChannelInstagram, igsID, igAccount.Name,
 	).First(&contact).Error
 
 	if err == nil {
+		a.Log.Info("Existing Instagram contact found", "contact_id", contact.ID, "profile_name", contact.ProfileName)
 		return &contact, false
 	}
+
+	a.Log.Info("Creating new Instagram contact", "igsid", igsID)
 
 	// Create new contact
 	contact = models.Contact{
 		BaseModel:         models.BaseModel{ID: uuid.New()},
-		OrganizationID:    orgID,
+		OrganizationID:    igAccount.OrganizationID,
 		Channel:           models.ChannelInstagram,
 		ChannelIdentifier: igsID,
-		InstagramAccount:  accountName,
+		InstagramAccount:  igAccount.Name,
 		ProfileName:       "", // Will be populated when we fetch user profile
 		IsRead:            false,
 	}
 
 	// Try to fetch user profile for name
 	if a.Instagram != nil {
-		igAccount, err := a.getInstagramAccountCached(accountName)
-		if err == nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			account := &instagram.Account{
-				InstagramAccountID: igAccount.InstagramAccountID,
-				PageID:             igAccount.PageID,
-				APIVersion:         igAccount.APIVersion,
-				AccessToken:        igAccount.AccessToken,
-			}
-
-			profile, err := a.Instagram.GetUserProfile(ctx, account, igsID)
-			if err == nil && profile != nil {
-				contact.ProfileName = profile.Name
-				if contact.ProfileName == "" && profile.Username != "" {
-					contact.ProfileName = "@" + profile.Username
-				}
-			}
+		// Debug: log token info (safely - just length and first/last chars)
+		tokenLen := len(igAccount.AccessToken)
+		tokenPreview := ""
+		if tokenLen > 10 {
+			tokenPreview = igAccount.AccessToken[:5] + "..." + igAccount.AccessToken[tokenLen-5:]
 		}
+		a.Log.Info("Attempting to fetch Instagram user profile",
+			"igsid", igsID,
+			"page_id", igAccount.PageID,
+			"api_version", igAccount.APIVersion,
+			"access_token_length", tokenLen,
+			"access_token_preview", tokenPreview,
+		)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		account := &instagram.Account{
+			InstagramAccountID: igAccount.InstagramAccountID,
+			PageID:             igAccount.PageID,
+			APIVersion:         igAccount.APIVersion,
+			AccessToken:        igAccount.AccessToken,
+		}
+
+		profile, err := a.Instagram.GetUserProfile(ctx, account, igsID)
+		if err != nil {
+			a.Log.Error("Failed to fetch Instagram user profile",
+				"error", err,
+				"igsid", igsID,
+				"page_id", igAccount.PageID,
+			)
+		} else if profile != nil {
+			a.Log.Info("Instagram user profile fetched successfully",
+				"igsid", igsID,
+				"profile_id", profile.ID,
+				"profile_name", profile.Name,
+				"profile_username", profile.Username,
+			)
+			contact.ProfileName = profile.Name
+			if contact.ProfileName == "" && profile.Username != "" {
+				contact.ProfileName = "@" + profile.Username
+			}
+			a.Log.Info("Set contact profile name", "profile_name", contact.ProfileName)
+		} else {
+			a.Log.Warn("Instagram user profile is nil", "igsid", igsID)
+		}
+	} else {
+		a.Log.Warn("Instagram client is nil, cannot fetch profile")
 	}
+
+	a.Log.Info("Creating contact in database", "profile_name", contact.ProfileName)
 
 	if err := a.DB.Create(&contact).Error; err != nil {
 		a.Log.Error("Failed to create Instagram contact", "error", err)
 		// Try to fetch again in case of race condition
 		a.DB.Where(
 			"organization_id = ? AND channel = ? AND channel_identifier = ?",
-			orgID, models.ChannelInstagram, igsID,
+			igAccount.OrganizationID, models.ChannelInstagram, igsID,
 		).First(&contact)
 		return &contact, false
 	}
+
+	a.Log.Info("Instagram contact created successfully", "contact_id", contact.ID, "profile_name", contact.ProfileName)
 
 	return &contact, true
 }

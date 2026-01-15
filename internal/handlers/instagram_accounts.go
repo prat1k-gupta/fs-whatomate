@@ -336,14 +336,77 @@ func generateInstagramVerifyToken() string {
 	return hex.EncodeToString(bytes)
 }
 
-// InvalidateInstagramAccountCache invalidates the cache for an Instagram account
+// InvalidateInstagramAccountCache invalidates all caches for an Instagram account
 func (a *App) InvalidateInstagramAccountCache(instagramAccountID string) {
-	// Similar to WhatsApp cache invalidation
-	cacheKey := fmt.Sprintf("instagram_account:%s", instagramAccountID)
 	if a.Redis != nil {
 		ctx := context.Background()
+		// Invalidate by instagram_account_id
+		cacheKey := fmt.Sprintf("instagram_account:%s", instagramAccountID)
 		_ = a.Redis.Del(ctx, cacheKey).Err()
+
+		// Also need to invalidate by page_id, so fetch the account first
+		var account models.InstagramAccount
+		if err := a.DB.Where("instagram_account_id = ?", instagramAccountID).First(&account).Error; err == nil {
+			pageKey := fmt.Sprintf("instagram_account_page:%s", account.PageID)
+			_ = a.Redis.Del(ctx, pageKey).Err()
+		}
 	}
+}
+
+// instagramAccountCacheData is used for caching Instagram accounts with all fields including sensitive ones
+// This is separate from the model's json tags which hide AccessToken from API responses
+type instagramAccountCacheData struct {
+	ID                 string `json:"id"`
+	OrganizationID     string `json:"organization_id"`
+	Name               string `json:"name"`
+	InstagramAccountID string `json:"instagram_account_id"`
+	PageID             string `json:"page_id"`
+	AccessToken        string `json:"access_token"` // Included for cache, unlike model
+	WebhookVerifyToken string `json:"webhook_verify_token"`
+	APIVersion         string `json:"api_version"`
+	IsDefaultIncoming  bool   `json:"is_default_incoming"`
+	IsDefaultOutgoing  bool   `json:"is_default_outgoing"`
+	Status             string `json:"status"`
+}
+
+func instagramAccountToCacheData(acc *models.InstagramAccount) instagramAccountCacheData {
+	return instagramAccountCacheData{
+		ID:                 acc.ID.String(),
+		OrganizationID:     acc.OrganizationID.String(),
+		Name:               acc.Name,
+		InstagramAccountID: acc.InstagramAccountID,
+		PageID:             acc.PageID,
+		AccessToken:        acc.AccessToken,
+		WebhookVerifyToken: acc.WebhookVerifyToken,
+		APIVersion:         acc.APIVersion,
+		IsDefaultIncoming:  acc.IsDefaultIncoming,
+		IsDefaultOutgoing:  acc.IsDefaultOutgoing,
+		Status:             acc.Status,
+	}
+}
+
+func cacheDataToInstagramAccount(data instagramAccountCacheData) (*models.InstagramAccount, error) {
+	id, err := uuid.Parse(data.ID)
+	if err != nil {
+		return nil, err
+	}
+	orgID, err := uuid.Parse(data.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.InstagramAccount{
+		BaseModel:          models.BaseModel{ID: id},
+		OrganizationID:     orgID,
+		Name:               data.Name,
+		InstagramAccountID: data.InstagramAccountID,
+		PageID:             data.PageID,
+		AccessToken:        data.AccessToken,
+		WebhookVerifyToken: data.WebhookVerifyToken,
+		APIVersion:         data.APIVersion,
+		IsDefaultIncoming:  data.IsDefaultIncoming,
+		IsDefaultOutgoing:  data.IsDefaultOutgoing,
+		Status:             data.Status,
+	}, nil
 }
 
 // getInstagramAccountCached retrieves an Instagram account from cache or database
@@ -355,9 +418,12 @@ func (a *App) getInstagramAccountCached(instagramAccountID string) (*models.Inst
 	if a.Redis != nil {
 		cached, err := a.Redis.Get(ctx, cacheKey).Result()
 		if err == nil {
-			var account models.InstagramAccount
-			if err := json.Unmarshal([]byte(cached), &account); err == nil {
-				return &account, nil
+			var cacheData instagramAccountCacheData
+			if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
+				account, err := cacheDataToInstagramAccount(cacheData)
+				if err == nil {
+					return account, nil
+				}
 			}
 		}
 	}
@@ -368,9 +434,10 @@ func (a *App) getInstagramAccountCached(instagramAccountID string) (*models.Inst
 		return nil, err
 	}
 
-	// Cache the result
+	// Cache the result using cache-safe struct
 	if a.Redis != nil {
-		if data, err := json.Marshal(account); err == nil {
+		cacheData := instagramAccountToCacheData(&account)
+		if data, err := json.Marshal(cacheData); err == nil {
 			_ = a.Redis.Set(ctx, cacheKey, data, 0).Err()
 		}
 	}
@@ -387,9 +454,12 @@ func (a *App) getInstagramAccountByPageIDCached(pageID string) (*models.Instagra
 	if a.Redis != nil {
 		cached, err := a.Redis.Get(ctx, cacheKey).Result()
 		if err == nil {
-			var account models.InstagramAccount
-			if err := json.Unmarshal([]byte(cached), &account); err == nil {
-				return &account, nil
+			var cacheData instagramAccountCacheData
+			if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
+				account, err := cacheDataToInstagramAccount(cacheData)
+				if err == nil {
+					return account, nil
+				}
 			}
 		}
 	}
@@ -400,9 +470,10 @@ func (a *App) getInstagramAccountByPageIDCached(pageID string) (*models.Instagra
 		return nil, err
 	}
 
-	// Cache the result
+	// Cache the result using cache-safe struct
 	if a.Redis != nil {
-		if data, err := json.Marshal(account); err == nil {
+		cacheData := instagramAccountToCacheData(&account)
+		if data, err := json.Marshal(cacheData); err == nil {
 			_ = a.Redis.Set(ctx, cacheKey, data, 0).Err()
 		}
 	}
