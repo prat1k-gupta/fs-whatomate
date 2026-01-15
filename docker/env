@@ -1,0 +1,55 @@
+# =============================================================================
+# Environment Variables for Whatomate Unified Container
+# Copy this to .env and fill in your values
+# =============================================================================
+
+# =============================================================================
+# DATABASE (Required)
+# =============================================================================
+# Option 1: Use a full PostgreSQL URL (recommended for managed databases like Neon)
+DATABASE_URL=postgresql://neondb_owner:your-password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+
+# Option 2: Set individual parameters (if not using DATABASE_URL)
+# DB_HOST=localhost
+# DB_PORT=5432
+# DB_USER=whatomate
+# DB_PASSWORD=whatomate
+# DB_NAME=whatomate
+# DB_SSL_MODE=disable
+
+# =============================================================================
+# APPLICATION
+# =============================================================================
+APP_ENVIRONMENT=production
+APP_DEBUG=false
+
+# Port to expose (default: 8080)
+PORT=8080
+
+# =============================================================================
+# SECURITY (Required for production!)
+# =============================================================================
+# Generate a secure random string: openssl rand -base64 32
+JWT_SECRET=change-this-to-a-secure-random-string
+
+# WhatsApp webhook verification token
+WEBHOOK_VERIFY_TOKEN=your-webhook-verify-token
+
+# =============================================================================
+# STORAGE (Optional)
+# =============================================================================
+# local or s3
+STORAGE_TYPE=local
+
+# S3 Configuration (if using STORAGE_TYPE=s3)
+# S3_BUCKET=your-bucket
+# S3_REGION=us-east-1
+# S3_KEY=your-access-key
+# S3_SECRET=your-secret-key
+
+# =============================================================================
+# AI PROVIDERS (Optional)
+# =============================================================================
+# OPENAI_KEY=sk-xxx
+# ANTHROPIC_KEY=sk-ant-xxx
+# GOOGLE_KEY=xxx

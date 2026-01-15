@@ -1,0 +1,61 @@
+# =============================================================================
+# Docker Compose for Whatomate Unified Container
+# Everything runs in a single container EXCEPT PostgreSQL (uses external DB)
+# =============================================================================
+
+services:
+  whatomate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.unified
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    image: whatomate:unified
+    container_name: whatomate
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - whatomate-uploads:/app/uploads
+      - whatomate-redis:/data/redis
+    environment:
+      # Database - Use your Neon PostgreSQL URL
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # OR set individual database parameters:
+      # WHATOMATE_DATABASE_HOST: ${DB_HOST:-}
+      # WHATOMATE_DATABASE_PORT: ${DB_PORT:-5432}
+      # WHATOMATE_DATABASE_USER: ${DB_USER:-}
+      # WHATOMATE_DATABASE_PASSWORD: ${DB_PASSWORD:-}
+      # WHATOMATE_DATABASE_NAME: ${DB_NAME:-}
+      # WHATOMATE_DATABASE_SSL_MODE: ${DB_SSL_MODE:-require}
+      
+      # Application
+      WHATOMATE_APP_ENVIRONMENT: ${APP_ENVIRONMENT:-production}
+      WHATOMATE_APP_DEBUG: ${APP_DEBUG:-false}
+      
+      # JWT - IMPORTANT: Change this in production!
+      WHATOMATE_JWT_SECRET: ${JWT_SECRET:-change-this-to-a-secure-random-string}
+      
+      # Storage
+      WHATOMATE_STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      WHATOMATE_STORAGE_LOCAL_PATH: /app/uploads
+      
+      # S3 Storage (optional)
+      WHATOMATE_STORAGE_S3_BUCKET: ${S3_BUCKET:-}
+      WHATOMATE_STORAGE_S3_REGION: ${S3_REGION:-}
+      WHATOMATE_STORAGE_S3_KEY: ${S3_KEY:-}
+      WHATOMATE_STORAGE_S3_SECRET: ${S3_SECRET:-}
+      
+      # WhatsApp
+      WHATOMATE_WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WEBHOOK_VERIFY_TOKEN:-}
+      
+      # AI (optional)
+      WHATOMATE_AI_OPENAI_KEY: ${OPENAI_KEY:-}
+      WHATOMATE_AI_ANTHROPIC_KEY: ${ANTHROPIC_KEY:-}
+      WHATOMATE_AI_GOOGLE_KEY: ${GOOGLE_KEY:-}
+
+volumes:
+  whatomate-uploads:
+  whatomate-redis:
