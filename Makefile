@@ -67,7 +67,7 @@ deps-update:
 	$(GOMOD) tidy
 	$(GOGET) -u ./...
 
-# Docker commands
+# Docker commands (multi-container setup)
 docker-build:
 	$(DOCKER_COMPOSE) build
 
@@ -82,6 +82,43 @@ docker-logs:
 
 docker-restart:
 	$(DOCKER_COMPOSE) restart
+
+# =============================================================================
+# Unified Docker (single container with external DB)
+# =============================================================================
+DOCKER_COMPOSE_UNIFIED=docker compose -f docker/docker-compose.unified.yml
+
+# Build unified Docker image (frontend + backend + Redis in one container)
+docker-unified-build:
+	$(DOCKER_COMPOSE_UNIFIED) build
+
+# Start unified container
+docker-unified-up:
+	$(DOCKER_COMPOSE_UNIFIED) up -d
+
+# Stop unified container
+docker-unified-down:
+	$(DOCKER_COMPOSE_UNIFIED) down
+
+# View unified container logs
+docker-unified-logs:
+	$(DOCKER_COMPOSE_UNIFIED) logs -f
+
+# Restart unified container
+docker-unified-restart:
+	$(DOCKER_COMPOSE_UNIFIED) restart
+
+# Quick start with unified container (build + run)
+docker-unified: docker-unified-build docker-unified-up
+	@echo ""
+	@echo "Whatomate is running!"
+	@echo "Access at: http://localhost:8080"
+	@echo ""
+	@echo "Default login:"
+	@echo "  Email: admin@admin.com"
+	@echo "  Password: admin"
+	@echo ""
+	@echo "View logs: make docker-unified-logs"
 
 # Database migrations
 migrate:
@@ -148,11 +185,18 @@ help:
 	@echo "  test           - Run tests"
 	@echo "  test-coverage  - Run tests with coverage report"
 	@echo ""
-	@echo "Docker:"
+	@echo "Docker (multi-container with local PostgreSQL):"
 	@echo "  docker-build   - Build Docker images"
 	@echo "  docker-up      - Start Docker containers"
 	@echo "  docker-down    - Stop Docker containers"
 	@echo "  docker-logs    - View Docker logs"
+	@echo ""
+	@echo "Docker Unified (single container with external PostgreSQL):"
+	@echo "  docker-unified       - Build and start unified container"
+	@echo "  docker-unified-build - Build unified Docker image"
+	@echo "  docker-unified-up    - Start unified container"
+	@echo "  docker-unified-down  - Stop unified container"
+	@echo "  docker-unified-logs  - View unified container logs"
 	@echo ""
 	@echo "Other:"
 	@echo "  clean          - Remove build artifacts"
