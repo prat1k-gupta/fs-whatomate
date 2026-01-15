@@ -1,0 +1,8 @@
+export { BasePage } from './BasePage'
+export { TablePage } from './TablePage'
+export { DialogPage } from './DialogPage'
+export { LoginPage } from './LoginPage'
+export { CampaignsPage } from './CampaignsPage'
+export { FlowsPage, ChatbotFlowsPage } from './FlowsPage'
+export { CardGridPage, TableSettingsPage, CannedResponsesPage, CustomActionsPage, ApiKeysPage } from './SettingsPage'
+export { KeywordsPage, AIContextsPage } from './ChatbotPage'
