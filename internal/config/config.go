@@ -11,14 +11,15 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	App      AppConfig      `koanf:"app"`
-	Server   ServerConfig   `koanf:"server"`
-	Database DatabaseConfig `koanf:"database"`
-	Redis    RedisConfig    `koanf:"redis"`
-	JWT      JWTConfig      `koanf:"jwt"`
-	WhatsApp WhatsAppConfig `koanf:"whatsapp"`
-	AI       AIConfig       `koanf:"ai"`
-	Storage  StorageConfig  `koanf:"storage"`
+	App       AppConfig       `koanf:"app"`
+	Server    ServerConfig    `koanf:"server"`
+	Database  DatabaseConfig  `koanf:"database"`
+	Redis     RedisConfig     `koanf:"redis"`
+	JWT       JWTConfig       `koanf:"jwt"`
+	WhatsApp  WhatsAppConfig  `koanf:"whatsapp"`
+	Instagram InstagramConfig `koanf:"instagram"`
+	AI        AIConfig        `koanf:"ai"`
+	Storage   StorageConfig   `koanf:"storage"`
 }
 
 type AppConfig struct {
@@ -61,6 +62,12 @@ type JWTConfig struct {
 }
 
 type WhatsAppConfig struct {
+	WebhookVerifyToken string `koanf:"webhook_verify_token"`
+	APIVersion         string `koanf:"api_version"`
+	BaseURL            string `koanf:"base_url"` // Meta Graph API base URL
+}
+
+type InstagramConfig struct {
 	WebhookVerifyToken string `koanf:"webhook_verify_token"`
 	APIVersion         string `koanf:"api_version"`
 	BaseURL            string `koanf:"base_url"` // Meta Graph API base URL
@@ -159,6 +166,12 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.WhatsApp.BaseURL == "" {
 		cfg.WhatsApp.BaseURL = "https://graph.facebook.com"
+	}
+	if cfg.Instagram.APIVersion == "" {
+		cfg.Instagram.APIVersion = "v21.0"
+	}
+	if cfg.Instagram.BaseURL == "" {
+		cfg.Instagram.BaseURL = "https://graph.facebook.com"
 	}
 	if cfg.Storage.Type == "" {
 		cfg.Storage.Type = "local"

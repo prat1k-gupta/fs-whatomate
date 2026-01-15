@@ -1,0 +1,223 @@
+---
+title: Instagram Accounts
+description: API endpoints for managing Instagram Business account connections
+---
+
+## Overview
+
+Instagram accounts represent your connected Instagram Business accounts. These endpoints allow you to manage your Instagram connections for receiving and sending Direct Messages.
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/instagram/accounts` | List all Instagram accounts |
+| POST | `/api/instagram/accounts` | Create a new Instagram account |
+| GET | `/api/instagram/accounts/{id}` | Get a specific account |
+| PUT | `/api/instagram/accounts/{id}` | Update an account |
+| DELETE | `/api/instagram/accounts/{id}` | Delete an account |
+| POST | `/api/instagram/accounts/{id}/test` | Test account connection |
+
+## List Accounts
+
+```http
+GET /api/instagram/accounts
+Authorization: Bearer {token}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "accounts": [
+      {
+        "id": "uuid",
+        "name": "Main Instagram",
+        "instagram_account_id": "17841400000000000",
+        "page_id": "123456789012345",
+        "webhook_verify_token": "abc123...",
+        "api_version": "v21.0",
+        "is_default_incoming": true,
+        "is_default_outgoing": true,
+        "status": "active",
+        "has_access_token": true,
+        "created_at": "2024-01-15T10:30:00Z",
+        "updated_at": "2024-01-15T10:30:00Z"
+      }
+    ]
+  }
+}
+```
+
+## Create Account
+
+```http
+POST /api/instagram/accounts
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+### Request Body
+
+```json
+{
+  "name": "Main Instagram",
+  "instagram_account_id": "17841400000000000",
+  "page_id": "123456789012345",
+  "access_token": "EAABs...",
+  "webhook_verify_token": "my-verify-token",
+  "api_version": "v21.0",
+  "is_default_incoming": true,
+  "is_default_outgoing": true
+}
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| name | string | Yes | Display name for the account |
+| instagram_account_id | string | Yes | Instagram Business Account ID |
+| page_id | string | Yes | Connected Facebook Page ID |
+| access_token | string | Yes | Page access token with Instagram permissions |
+| webhook_verify_token | string | No | Custom verify token (auto-generated if empty) |
+| api_version | string | No | Meta Graph API version (default: v21.0) |
+| is_default_incoming | boolean | No | Set as default for incoming messages |
+| is_default_outgoing | boolean | No | Set as default for outgoing messages |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "Main Instagram",
+    "instagram_account_id": "17841400000000000",
+    "page_id": "123456789012345",
+    "webhook_verify_token": "generated-token-here",
+    "api_version": "v21.0",
+    "is_default_incoming": true,
+    "is_default_outgoing": true,
+    "status": "active",
+    "has_access_token": true,
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+## Get Account
+
+```http
+GET /api/instagram/accounts/{id}
+Authorization: Bearer {token}
+```
+
+### Response
+
+Same structure as the account object in Create Account response.
+
+## Update Account
+
+```http
+PUT /api/instagram/accounts/{id}
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+```json
+{
+  "name": "Updated Name",
+  "access_token": "new-token",
+  "is_default_incoming": false
+}
+```
+
+:::note
+Leave `access_token` empty to keep the existing token.
+:::
+
+## Delete Account
+
+```http
+DELETE /api/instagram/accounts/{id}
+Authorization: Bearer {token}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "message": "Account deleted successfully"
+  }
+}
+```
+
+## Test Connection
+
+Tests the Instagram API connection by fetching the account details.
+
+```http
+POST /api/instagram/accounts/{id}/test
+Authorization: Bearer {token}
+```
+
+### Response (Success)
+
+```json
+{
+  "status": "success",
+  "data": {
+    "success": true,
+    "id": "17841400000000000",
+    "name": "My Business",
+    "username": "mybusiness",
+    "profile_picture": "https://...",
+    "followers_count": 10000
+  }
+}
+```
+
+### Response (Failure)
+
+```json
+{
+  "status": "success",
+  "data": {
+    "success": false,
+    "error": "Invalid access token"
+  }
+}
+```
+
+## Webhook Configuration
+
+The Instagram webhook URL for receiving messages is:
+
+```
+https://your-domain.com/api/webhook/instagram
+```
+
+Configure this URL in your Meta Developer Console with the following settings:
+
+- **Callback URL**: `https://your-domain.com/api/webhook/instagram`
+- **Verify Token**: Use the `webhook_verify_token` from your account
+- **Subscription Fields**: `messages`
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| 400 | Invalid request body or missing required fields |
+| 401 | Unauthorized - invalid or missing token |
+| 404 | Account not found |
+| 500 | Internal server error |

@@ -1,0 +1,169 @@
+---
+title: Instagram Setup
+description: Connect your Instagram Business Account to Whatomate
+---
+
+This guide walks you through connecting your Instagram Business Account to Whatomate for receiving and responding to Direct Messages.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- An **Instagram Business** or **Creator** account
+- A **Facebook Page** connected to your Instagram account
+- Access to **Meta Business Suite** or **Business Settings**
+- A **Meta Developer** account
+
+## Step 1: Create or Configure Meta App
+
+1. Go to [Meta Developer Console](https://developers.facebook.com)
+2. Click **My Apps** in the top right
+3. Create a new app or select an existing one
+4. Choose **Business** as the app type
+5. Fill in the app details and create
+
+## Step 2: Add Instagram Product
+
+1. In your app dashboard, click **Add Product**
+2. Find **Instagram** and click **Set Up**
+3. Complete the basic setup steps
+
+## Step 3: Connect Instagram Account
+
+1. Go to **Instagram** → **Basic Display** or **Instagram Graph API**
+2. Click **Add or Remove Instagram Test Users** (for development)
+3. Or configure **Instagram Account** in production
+4. Ensure your Instagram Business/Creator account is connected
+
+## Step 4: Get Required IDs
+
+You'll need two IDs:
+
+### Instagram Business Account ID
+
+1. Go to **Instagram** → **Basic Display** → **User Token Generator**
+2. Generate a token for your Instagram account
+3. Call the Graph API to get your Instagram Business Account ID:
+
+```bash
+curl -X GET "https://graph.facebook.com/v21.0/me/accounts?access_token={PAGE_ACCESS_TOKEN}"
+```
+
+4. Find your page and note the `id`
+5. Then get the Instagram Business Account ID:
+
+```bash
+curl -X GET "https://graph.facebook.com/v21.0/{PAGE_ID}?fields=instagram_business_account&access_token={PAGE_ACCESS_TOKEN}"
+```
+
+### Facebook Page ID
+
+This is the ID of the Facebook Page connected to your Instagram account. You can find it in:
+- Meta Business Suite → Settings → Page Info
+- Or from the API response above
+
+## Step 5: Generate Access Token
+
+You need a Page Access Token with the following permissions:
+
+- `instagram_basic`
+- `instagram_manage_messages`
+- `pages_messaging`
+- `pages_show_list`
+
+### Option A: Using Graph API Explorer
+
+1. Go to [Graph API Explorer](https://developers.facebook.com/tools/explorer/)
+2. Select your app
+3. Click **Generate Access Token**
+4. Select the required permissions
+5. Click **Generate Token**
+
+:::caution
+Tokens from Graph API Explorer expire quickly. For production, use a long-lived token.
+:::
+
+### Option B: Long-Lived Token (Recommended for Production)
+
+1. Go to **Business Settings** → **System Users**
+2. Create a system user if you don't have one
+3. Assign your app to the system user
+4. Add your Page as an asset with the required permissions
+5. Generate a token from the system user
+
+## Step 6: Configure Webhook
+
+1. In your Meta app, go to **Webhooks**
+2. Click **Add Subscription** for **Instagram**
+3. Enter the callback URL:
+   ```
+   https://your-domain.com/api/webhook/instagram
+   ```
+4. Enter your verify token (you'll create this in Whatomate)
+5. Subscribe to the **messages** field
+
+## Step 7: Add Account in Whatomate
+
+1. Log in to Whatomate
+2. Go to **Settings** → **Instagram Accounts**
+3. Click **Add Account**
+4. Fill in the form:
+   - **Account Name**: A friendly name (e.g., "Main Instagram")
+   - **Instagram Business Account ID**: From Step 4
+   - **Facebook Page ID**: From Step 4
+   - **Access Token**: From Step 5
+5. Copy the generated **Verify Token** and update your Meta webhook configuration
+6. Click **Create Account**
+7. Click **Test** to verify the connection
+
+## Step 8: Test the Integration
+
+1. Open Instagram app on your phone
+2. Go to the business profile you connected
+3. Send a Direct Message
+4. Check Whatomate - the message should appear in your chat inbox
+5. Try replying from Whatomate
+
+## Troubleshooting
+
+### Webhook Not Receiving Messages
+
+1. Verify the webhook URL is correct
+2. Check the verify token matches
+3. Ensure you subscribed to the `messages` field
+4. Check your app is approved for Instagram messaging (production)
+
+### Invalid Access Token
+
+1. Tokens expire - generate a new one
+2. Ensure the token has all required permissions
+3. Use a long-lived or system user token for production
+
+### Messages Not Appearing
+
+1. Check the channel filter in chat view
+2. Verify the Instagram account is correctly configured
+3. Check server logs for webhook errors
+
+### Cannot Reply to Messages
+
+1. Check if the 24-hour window has passed
+2. Verify the access token is still valid
+3. Ensure you have `instagram_manage_messages` permission
+
+## Production Checklist
+
+Before going live:
+
+- [ ] App Review completed for Instagram permissions
+- [ ] Using long-lived or system user access token
+- [ ] Webhook URL uses HTTPS
+- [ ] Webhook verify token is secure
+- [ ] Backup access token generation process documented
+- [ ] Team trained on Instagram messaging limitations
+
+## Next Steps
+
+- [Learn about Instagram messaging features](/features/instagram)
+- [API Reference for Instagram accounts](/api-reference/instagram-accounts)
+- [Configure chatbot for Instagram](/features/chatbot)

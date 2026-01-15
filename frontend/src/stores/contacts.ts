@@ -2,8 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contactsService, messagesService } from '@/services/api'
 
+export type Channel = 'whatsapp' | 'instagram'
+
 export interface Contact {
   id: string
+  channel: Channel
+  channel_identifier?: string  // IGSID for Instagram
   phone_number: string
   name: string
   profile_name?: string
@@ -12,6 +16,7 @@ export interface Contact {
   tags: string[]
   custom_fields: Record<string, any>
   last_message_at?: string
+  last_message_preview?: string
   unread_count: number
   assigned_user_id?: string
   created_at: string
@@ -34,6 +39,7 @@ export interface Reaction {
 export interface Message {
   id: string
   contact_id: string
+  channel: Channel
   direction: 'incoming' | 'outgoing'
   message_type: string
   content: any
@@ -56,6 +62,7 @@ export interface Message {
   }
   status: string
   wamid?: string
+  instagram_mid?: string
   error_message?: string
   is_reply?: boolean
   reply_to_message_id?: string
@@ -75,6 +82,7 @@ export const useContactsStore = defineStore('contacts', () => {
   const hasMoreMessages = ref(false)
   const searchQuery = ref('')
   const replyingTo = ref<Message | null>(null)
+  const channelFilter = ref<Channel | ''>('') // '' means all channels
 
   // Contacts pagination
   const contactsPage = ref(1)
@@ -84,13 +92,25 @@ export const useContactsStore = defineStore('contacts', () => {
   const hasMoreContacts = computed(() => contacts.value.length < contactsTotal.value)
 
   const filteredContacts = computed(() => {
-    if (!searchQuery.value) return contacts.value
-    const query = searchQuery.value.toLowerCase()
-    return contacts.value.filter(c =>
-      c.name.toLowerCase().includes(query) ||
-      c.phone_number.includes(query) ||
-      (c.profile_name?.toLowerCase().includes(query))
-    )
+    let filtered = contacts.value
+
+    // Filter by channel
+    if (channelFilter.value) {
+      filtered = filtered.filter(c => c.channel === channelFilter.value)
+    }
+
+    // Filter by search
+    if (searchQuery.value) {
+      const query = searchQuery.value.toLowerCase()
+      filtered = filtered.filter(c =>
+        c.name.toLowerCase().includes(query) ||
+        c.phone_number.includes(query) ||
+        (c.profile_name?.toLowerCase().includes(query)) ||
+        (c.channel_identifier?.includes(query))
+      )
+    }
+
+    return filtered
   })
 
   const sortedContacts = computed(() => {
@@ -101,14 +121,19 @@ export const useContactsStore = defineStore('contacts', () => {
     })
   })
 
-  async function fetchContacts(params?: { search?: string; page?: number; limit?: number }) {
+  async function fetchContacts(params?: { search?: string; page?: number; limit?: number; channel?: Channel | '' }) {
     isLoading.value = true
     try {
-      const response = await contactsService.list({
+      const requestParams: any = {
         page: 1,
         limit: contactsLimit.value,
         ...params
-      })
+      }
+      // Include channel filter if set
+      if (channelFilter.value) {
+        requestParams.channel = channelFilter.value
+      }
+      const response = await contactsService.list(requestParams)
       // API returns { status: "success", data: { contacts: [...], total: number } }
       const data = response.data.data || response.data
       contacts.value = data.contacts || []
@@ -285,6 +310,10 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
+  function setChannelFilter(channel: Channel | '') {
+    channelFilter.value = channel
+  }
+
   return {
     contacts,
     currentContact,
@@ -295,6 +324,7 @@ export const useContactsStore = defineStore('contacts', () => {
     hasMoreMessages,
     searchQuery,
     replyingTo,
+    channelFilter,
     filteredContacts,
     sortedContacts,
     // Contacts pagination
@@ -303,6 +333,7 @@ export const useContactsStore = defineStore('contacts', () => {
     isLoadingMoreContacts,
     fetchContacts,
     loadMoreContacts,
+    setChannelFilter,
     // Other
     fetchContact,
     fetchMessages,

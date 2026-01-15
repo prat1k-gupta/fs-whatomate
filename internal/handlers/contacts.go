@@ -23,26 +23,29 @@ import (
 
 // ContactResponse represents a contact with additional fields for the frontend
 type ContactResponse struct {
-	ID                 uuid.UUID  `json:"id"`
-	PhoneNumber        string     `json:"phone_number"`
-	Name               string     `json:"name"`
-	ProfileName        string     `json:"profile_name"`
-	AvatarURL          string     `json:"avatar_url"`
-	Status             string     `json:"status"`
-	Tags               []string   `json:"tags"`
-	CustomFields       any        `json:"custom_fields"`
-	LastMessageAt      *time.Time `json:"last_message_at"`
-	LastMessagePreview string     `json:"last_message_preview"`
-	UnreadCount        int        `json:"unread_count"`
-	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                 uuid.UUID      `json:"id"`
+	Channel            models.Channel `json:"channel"`                        // whatsapp or instagram
+	ChannelIdentifier  string         `json:"channel_identifier,omitempty"`   // IGSID for Instagram
+	PhoneNumber        string         `json:"phone_number"`
+	Name               string         `json:"name"`
+	ProfileName        string         `json:"profile_name"`
+	AvatarURL          string         `json:"avatar_url"`
+	Status             string         `json:"status"`
+	Tags               []string       `json:"tags"`
+	CustomFields       any            `json:"custom_fields"`
+	LastMessageAt      *time.Time     `json:"last_message_at"`
+	LastMessagePreview string         `json:"last_message_preview"`
+	UnreadCount        int            `json:"unread_count"`
+	AssignedUserID     *uuid.UUID     `json:"assigned_user_id,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
 // MessageResponse represents a message for the frontend
 type MessageResponse struct {
 	ID               uuid.UUID            `json:"id"`
 	ContactID        uuid.UUID            `json:"contact_id"`
+	Channel          models.Channel       `json:"channel"`                          // whatsapp or instagram
 	Direction        models.Direction     `json:"direction"`
 	MessageType      models.MessageType   `json:"message_type"`
 	Content          any                  `json:"content"`
@@ -51,7 +54,8 @@ type MessageResponse struct {
 	MediaFilename    string               `json:"media_filename,omitempty"`
 	InteractiveData  models.JSONB         `json:"interactive_data,omitempty"`
 	Status           models.MessageStatus `json:"status"`
-	WAMID            string               `json:"wamid"`
+	WAMID            string               `json:"wamid,omitempty"`
+	InstagramMID     string               `json:"instagram_mid,omitempty"`
 	Error            string               `json:"error_message"`
 	IsReply          bool                 `json:"is_reply"`
 	ReplyToMessageID *string              `json:"reply_to_message_id,omitempty"`
@@ -87,6 +91,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	page, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("page")))
 	limit, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("limit")))
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
+	channel := string(r.RequestCtx.QueryArgs().Peek("channel")) // Filter by channel: whatsapp, instagram, or empty for all
 
 	if page < 1 {
 		page = 1
@@ -104,9 +109,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 
+	// Filter by channel if specified
+	if channel != "" {
+		query = query.Where("channel = ?", channel)
+	}
+
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		query = query.Where("phone_number LIKE ? OR profile_name LIKE ?", searchPattern, searchPattern)
+		query = query.Where("phone_number LIKE ? OR profile_name LIKE ? OR channel_identifier LIKE ?", searchPattern, searchPattern, searchPattern)
 	}
 
 	// Order by last message time (most recent first)
@@ -148,8 +158,16 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			profileName = MaskIfPhoneNumber(profileName)
 		}
 
+		// Default to whatsapp channel if not set (backward compatibility)
+		contactChannel := c.Channel
+		if contactChannel == "" {
+			contactChannel = models.ChannelWhatsApp
+		}
+
 		response[i] = ContactResponse{
 			ID:                 c.ID,
+			Channel:            contactChannel,
+			ChannelIdentifier:  c.ChannelIdentifier,
 			PhoneNumber:        phoneNumber,
 			Name:               profileName,
 			ProfileName:        profileName,
@@ -368,9 +386,16 @@ func (a *App) buildMessagesResponse(messages []models.Message) []MessageResponse
 			content = map[string]string{"body": m.Content}
 		}
 
+		// Default to whatsapp channel if not set (backward compatibility)
+		msgChannel := m.Channel
+		if msgChannel == "" {
+			msgChannel = models.ChannelWhatsApp
+		}
+
 		msgResp := MessageResponse{
 			ID:              m.ID,
 			ContactID:       m.ContactID,
+			Channel:         msgChannel,
 			Direction:       m.Direction,
 			MessageType:     m.MessageType,
 			Content:         content,
@@ -380,6 +405,7 @@ func (a *App) buildMessagesResponse(messages []models.Message) []MessageResponse
 			InteractiveData: m.InteractiveData,
 			Status:          m.Status,
 			WAMID:           m.WhatsAppMessageID,
+			InstagramMID:    m.InstagramMessageID,
 			Error:           m.ErrorMessage,
 			IsReply:         m.IsReply,
 			CreatedAt:       m.CreatedAt,
@@ -543,17 +569,26 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
 
+	// Default to whatsapp channel if not set
+	msgChannel := message.Channel
+	if msgChannel == "" {
+		msgChannel = models.ChannelWhatsApp
+	}
+
 	// Build response
 	response := MessageResponse{
-		ID:          message.ID,
-		ContactID:   message.ContactID,
-		Direction:   message.Direction,
-		MessageType: message.MessageType,
-		Content:     map[string]string{"body": message.Content},
-		Status:      message.Status,
-		IsReply:     message.IsReply,
-		CreatedAt:   message.CreatedAt,
-		UpdatedAt:   message.UpdatedAt,
+		ID:           message.ID,
+		ContactID:    message.ContactID,
+		Channel:      msgChannel,
+		Direction:    message.Direction,
+		MessageType:  message.MessageType,
+		Content:      map[string]string{"body": message.Content},
+		Status:       message.Status,
+		WAMID:        message.WhatsAppMessageID,
+		InstagramMID: message.InstagramMessageID,
+		IsReply:      message.IsReply,
+		CreatedAt:    message.CreatedAt,
+		UpdatedAt:    message.UpdatedAt,
 	}
 
 	// Add reply context to response
@@ -712,9 +747,16 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
 
+	// Default to whatsapp channel if not set
+	mediaChannel := message.Channel
+	if mediaChannel == "" {
+		mediaChannel = models.ChannelWhatsApp
+	}
+
 	response := MessageResponse{
 		ID:            message.ID,
 		ContactID:     message.ContactID,
+		Channel:       mediaChannel,
 		Direction:     message.Direction,
 		MessageType:   message.MessageType,
 		Content:       map[string]string{"body": message.Content},
@@ -722,6 +764,8 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		MediaMimeType: message.MediaMimeType,
 		MediaFilename: message.MediaFilename,
 		Status:        message.Status,
+		WAMID:         message.WhatsAppMessageID,
+		InstagramMID:  message.InstagramMessageID,
 		CreatedAt:     message.CreatedAt,
 		UpdatedAt:     message.UpdatedAt,
 	}

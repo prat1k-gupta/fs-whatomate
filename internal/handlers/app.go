@@ -10,6 +10,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/websocket"
+	"github.com/shridarpatil/whatomate/pkg/instagram"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -23,6 +24,7 @@ type App struct {
 	Redis             *redis.Client
 	Log               logf.Logger
 	WhatsApp          *whatsapp.Client
+	Instagram         *instagram.Client
 	WSHub             *websocket.Hub
 	Queue             queue.Queue
 	CampaignSubCancel context.CancelFunc

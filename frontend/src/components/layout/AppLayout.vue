@@ -48,7 +48,9 @@ import {
   Webhook,
   BarChart3,
   ShieldCheck,
-  Zap
+  Zap,
+  Instagram,
+  Phone
 } from 'lucide-vue-next'
 import { useColorMode } from '@/composables/useColorMode'
 import { toast } from 'vue-sonner'
@@ -253,7 +255,8 @@ const allNavItems = [
     children: [
       { name: 'General', path: '/settings', icon: Settings },
       { name: 'Chatbot', path: '/settings/chatbot', icon: Bot },
-      { name: 'Accounts', path: '/settings/accounts', icon: Users },
+      { name: 'WhatsApp Accounts', path: '/settings/accounts', icon: Phone },
+      { name: 'Instagram Accounts', path: '/settings/instagram-accounts', icon: Instagram },
       { name: 'Canned Responses', path: '/settings/canned-responses', icon: MessageSquareText },
       { name: 'Teams', path: '/settings/teams', icon: Users },
       { name: 'Users', path: '/settings/users', icon: Users, roles: ['admin'] },

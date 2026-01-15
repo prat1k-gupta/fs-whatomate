@@ -1,0 +1,97 @@
+---
+title: Instagram Messaging
+description: Receive and respond to Instagram Direct Messages
+---
+
+## Overview
+
+Whatomate supports Instagram Direct Messaging through Meta's Instagram Messenger API. Connect your Instagram Business or Creator account to receive and respond to messages from your followers directly within the platform.
+
+## Key Features
+
+- **Receive Messages**: Get text messages, images, videos, and other media from Instagram users
+- **Send Replies**: Respond to messages with text and media attachments
+- **Story Replies**: View and respond to story replies and mentions
+- **Reactions**: See and send reactions to messages
+- **Unified Inbox**: Manage Instagram and WhatsApp conversations side-by-side
+- **Agent Assignment**: Assign Instagram conversations to agents
+- **Contact Management**: Track Instagram contacts separately or alongside WhatsApp
+
+## Supported Message Types
+
+### Receiving
+
+| Type | Support |
+|------|---------|
+| Text | ✅ Full support |
+| Images | ✅ Full support |
+| Videos | ✅ Full support |
+| Audio | ✅ Full support |
+| Files | ✅ Full support |
+| Story Replies | ✅ Full support |
+| Story Mentions | ✅ Full support |
+| Reactions | ✅ Full support |
+
+### Sending
+
+| Type | Support |
+|------|---------|
+| Text | ✅ Full support |
+| Images | ✅ Full support |
+| Videos | ✅ Full support |
+| Audio | ✅ Full support |
+| Files | ✅ Full support |
+| Reactions | ✅ Full support |
+| Templates | ❌ Not supported |
+| Interactive | ❌ Not supported |
+
+## Limitations Compared to WhatsApp
+
+Instagram messaging has some important differences from WhatsApp that you should be aware of:
+
+### 24-Hour Response Window
+
+Unlike WhatsApp's template system, Instagram does not have approved message templates. You can only send messages within a **24-hour window** after the user's last message. After this window closes, you cannot initiate new conversations.
+
+### No Templates
+
+Instagram does not support pre-approved message templates. You cannot send marketing or transactional messages proactively.
+
+### No Interactive Elements
+
+Instagram messages don't support interactive buttons, lists, or quick replies that are available on WhatsApp.
+
+### No Broadcast Campaigns
+
+Since there are no templates and no proactive messaging, bulk broadcast campaigns are not available for Instagram.
+
+## Contact Identification
+
+Instagram contacts are identified by their **IGSID** (Instagram-Scoped ID), which is a unique identifier specific to your Instagram Business Account. This means:
+
+- Each Instagram account has its own set of IGSIDs
+- IGSIDs are different from Instagram usernames or user IDs
+- The same person will have different IGSIDs for different business accounts they interact with
+
+## Getting Started
+
+To start using Instagram messaging:
+
+1. [Set up your Instagram Business Account](/getting-started/instagram-setup)
+2. Configure the webhook in Meta Developer Console
+3. Add your Instagram account in Settings → Instagram Accounts
+4. Test the connection
+5. Start receiving messages!
+
+## Chat Interface
+
+Instagram contacts appear in the chat interface with a pink Instagram icon badge. You can filter the contact list to show only Instagram contacts using the channel filter tabs above the search bar.
+
+The chat header shows the contact's Instagram profile name or username, along with their IGSID for reference.
+
+## Best Practices
+
+1. **Respond Quickly**: Remember the 24-hour window - prioritize responding to Instagram messages promptly
+2. **Use Canned Responses**: Create canned responses for common Instagram queries
+3. **Monitor Story Mentions**: Story mentions and replies often require quick responses
+4. **Train Agents**: Ensure agents understand the differences between WhatsApp and Instagram messaging capabilities

@@ -80,9 +80,8 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Create redis user and set permissions
-RUN adduser -D -H redis && \
-    chown -R redis:redis /var/run/redis /data/redis
+# Set permissions for redis directories (redis user already exists from apk install)
+RUN chown -R redis:redis /var/run/redis /data/redis
 
 # Expose port
 EXPOSE 8080

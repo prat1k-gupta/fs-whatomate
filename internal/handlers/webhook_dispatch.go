@@ -25,23 +25,27 @@ type OutboundWebhookPayload struct {
 
 // MessageEventData represents data for message events
 type MessageEventData struct {
-	MessageID       string             `json:"message_id"`
-	ContactID       string             `json:"contact_id"`
-	ContactPhone    string             `json:"contact_phone"`
-	ContactName     string             `json:"contact_name"`
-	MessageType     models.MessageType `json:"message_type"`
-	Content         string             `json:"content"`
-	WhatsAppAccount string             `json:"whatsapp_account"`
-	Direction       models.Direction   `json:"direction,omitempty"`
-	SentByUserID    string             `json:"sent_by_user_id,omitempty"`
+	MessageID        string             `json:"message_id"`
+	ContactID        string             `json:"contact_id"`
+	ContactPhone     string             `json:"contact_phone"`
+	ContactName      string             `json:"contact_name"`
+	MessageType      models.MessageType `json:"message_type"`
+	Content          string             `json:"content"`
+	WhatsAppAccount  string             `json:"whatsapp_account,omitempty"`
+	InstagramAccount string             `json:"instagram_account,omitempty"`
+	Channel          string             `json:"channel,omitempty"` // "whatsapp" or "instagram"
+	Direction        models.Direction   `json:"direction,omitempty"`
+	SentByUserID     string             `json:"sent_by_user_id,omitempty"`
 }
 
 // ContactEventData represents data for contact events
 type ContactEventData struct {
-	ContactID       string `json:"contact_id"`
-	ContactPhone    string `json:"contact_phone"`
-	ContactName     string `json:"contact_name"`
-	WhatsAppAccount string `json:"whatsapp_account"`
+	ContactID        string `json:"contact_id"`
+	ContactPhone     string `json:"contact_phone"`
+	ContactName      string `json:"contact_name"`
+	WhatsAppAccount  string `json:"whatsapp_account,omitempty"`
+	InstagramAccount string `json:"instagram_account,omitempty"`
+	Channel          string `json:"channel,omitempty"` // "whatsapp" or "instagram"
 }
 
 // TransferEventData represents data for transfer events

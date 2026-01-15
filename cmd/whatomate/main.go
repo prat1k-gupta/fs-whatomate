@@ -18,6 +18,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
+	"github.com/shridarpatil/whatomate/pkg/instagram"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -153,6 +154,9 @@ func runServer(args []string) {
 	// Initialize WhatsApp client
 	waClient := whatsapp.New(lo)
 
+	// Initialize Instagram client
+	igClient := instagram.New(lo)
+
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(lo)
 	go wsHub.Run()
@@ -160,13 +164,14 @@ func runServer(args []string) {
 
 	// Initialize app with dependencies
 	app := &handlers.App{
-		Config:   cfg,
-		DB:       db,
-		Redis:    rdb,
-		Log:      lo,
-		WhatsApp: waClient,
-		WSHub:    wsHub,
-		Queue:    jobQueue,
+		Config:    cfg,
+		DB:        db,
+		Redis:     rdb,
+		Log:       lo,
+		WhatsApp:  waClient,
+		Instagram: igClient,
+		WSHub:     wsHub,
+		Queue:     jobQueue,
 	}
 
 	// Start campaign stats subscriber for real-time WebSocket updates from worker
@@ -388,8 +393,12 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/auth/sso/{provider}/callback", app.CallbackSSO)
 
 	// Webhook routes (public - for Meta)
+	// WhatsApp webhooks
 	g.GET("/api/webhook", app.WebhookVerify)
 	g.POST("/api/webhook", app.WebhookHandler)
+	// Instagram webhooks
+	g.GET("/api/webhook/instagram", app.InstagramWebhookVerify)
+	g.POST("/api/webhook/instagram", app.InstagramWebhookHandler)
 
 	// WebSocket route (auth handled in handler via query param)
 	g.GET("/ws", app.WebSocketHandler)
@@ -405,7 +414,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		// Skip auth for public routes
 		if path == "/health" || path == "/ready" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
-			path == "/api/webhook" || path == "/ws" {
+			path == "/api/webhook" || path == "/api/webhook/instagram" || path == "/ws" {
 			return r
 		}
 		// Skip auth for SSO routes (they handle their own auth via state tokens)
@@ -475,6 +484,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			if !isAllowed {
 				managerRoutes := []string{
 					"/api/accounts",
+					"/api/instagram/accounts",
 					"/api/templates",
 					"/api/flows",
 					"/api/campaigns",
@@ -515,13 +525,21 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/api-keys", app.CreateAPIKey)
 	g.DELETE("/api/api-keys/{id}", app.DeleteAPIKey)
 
-	// Accounts
+	// WhatsApp Accounts
 	g.GET("/api/accounts", app.ListAccounts)
 	g.POST("/api/accounts", app.CreateAccount)
 	g.GET("/api/accounts/{id}", app.GetAccount)
 	g.PUT("/api/accounts/{id}", app.UpdateAccount)
 	g.DELETE("/api/accounts/{id}", app.DeleteAccount)
 	g.POST("/api/accounts/{id}/test", app.TestAccountConnection)
+
+	// Instagram Accounts
+	g.GET("/api/instagram/accounts", app.ListInstagramAccounts)
+	g.POST("/api/instagram/accounts", app.CreateInstagramAccount)
+	g.GET("/api/instagram/accounts/{id}", app.GetInstagramAccount)
+	g.PUT("/api/instagram/accounts/{id}", app.UpdateInstagramAccount)
+	g.DELETE("/api/instagram/accounts/{id}", app.DeleteInstagramAccount)
+	g.POST("/api/instagram/accounts/{id}/test", app.TestInstagramAccountConnection)
 
 	// Contacts
 	g.GET("/api/contacts", app.ListContacts)

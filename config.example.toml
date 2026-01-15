@@ -38,6 +38,21 @@ secret = "your-super-secret-jwt-key-change-in-production"
 access_expiry_mins = 15
 refresh_expiry_days = 7
 
+[whatsapp]
+webhook_verify_token = ""  # Global verify token for WhatsApp webhooks
+api_version = "v21.0"
+base_url = "https://graph.facebook.com"
+
+[instagram]
+webhook_verify_token = ""  # Global verify token for Instagram webhooks
+api_version = "v21.0"
+base_url = "https://graph.facebook.com"
+
+[ai]
+openai_key = ""
+anthropic_key = ""
+google_key = ""
+
 [storage]
 type = "local"  # local, s3
 local_path = "./uploads"

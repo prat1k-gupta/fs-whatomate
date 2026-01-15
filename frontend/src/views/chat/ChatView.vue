@@ -74,7 +74,9 @@ import {
   Mail,
   Globe,
   Code,
-  RotateCw
+  RotateCw,
+  Instagram,
+  MessageCircle
 } from 'lucide-vue-next'
 import { formatTime, getInitials, truncate } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -1115,7 +1117,7 @@ async function sendMediaMessage() {
     <!-- Contacts List -->
     <div class="w-80 border-r flex flex-col bg-card">
       <!-- Search Header -->
-      <div class="p-2 border-b">
+      <div class="p-2 border-b space-y-2">
         <div class="relative">
           <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -1123,6 +1125,35 @@ async function sendMediaMessage() {
             placeholder="Search contacts..."
             class="pl-8 h-8 text-sm"
           />
+        </div>
+        <!-- Channel Filter -->
+        <div class="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="['h-7 px-2 text-xs', !contactsStore.channelFilter && 'bg-accent']"
+            @click="contactsStore.setChannelFilter('')"
+          >
+            All
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="['h-7 px-2 text-xs', contactsStore.channelFilter === 'whatsapp' && 'bg-accent']"
+            @click="contactsStore.setChannelFilter('whatsapp')"
+          >
+            <MessageCircle class="h-3 w-3 mr-1 text-green-500" />
+            WhatsApp
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :class="['h-7 px-2 text-xs', contactsStore.channelFilter === 'instagram' && 'bg-accent']"
+            @click="contactsStore.setChannelFilter('instagram')"
+          >
+            <Instagram class="h-3 w-3 mr-1 text-pink-500" />
+            Instagram
+          </Button>
         </div>
       </div>
 
@@ -1146,16 +1177,27 @@ async function sendMediaMessage() {
             </Avatar>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between">
-                <p class="text-sm font-medium truncate">
-                  {{ contact.name || contact.phone_number }}
-                </p>
-                <span class="text-[11px] text-muted-foreground">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <Instagram v-if="contact.channel === 'instagram'" class="h-3.5 w-3.5 text-pink-500 flex-shrink-0" />
+                      <MessageCircle v-else class="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {{ contact.channel === 'instagram' ? 'Instagram' : 'WhatsApp' }}
+                    </TooltipContent>
+                  </Tooltip>
+                  <p class="text-sm font-medium truncate">
+                    {{ contact.name || contact.phone_number }}
+                  </p>
+                </div>
+                <span class="text-[11px] text-muted-foreground flex-shrink-0">
                   {{ formatContactTime(contact.last_message_at) }}
                 </span>
               </div>
               <div class="flex items-center justify-between">
                 <p class="text-xs text-muted-foreground truncate">
-                  {{ contact.phone_number }}
+                  {{ contact.channel === 'instagram' ? (contact.channel_identifier || contact.name) : contact.phone_number }}
                 </p>
                 <Badge v-if="contact.unread_count > 0" class="ml-2 h-5 text-[10px]">
                   {{ contact.unread_count }}
@@ -1214,6 +1256,15 @@ async function sendMediaMessage() {
             </Avatar>
             <div>
               <div class="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger as-child>
+                    <Instagram v-if="contactsStore.currentContact.channel === 'instagram'" class="h-4 w-4 text-pink-500" />
+                    <MessageCircle v-else class="h-4 w-4 text-green-500" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {{ contactsStore.currentContact.channel === 'instagram' ? 'Instagram' : 'WhatsApp' }}
+                  </TooltipContent>
+                </Tooltip>
                 <p class="text-sm font-medium">
                   {{ contactsStore.currentContact.name || contactsStore.currentContact.phone_number }}
                 </p>
@@ -1222,7 +1273,7 @@ async function sendMediaMessage() {
                 </Badge>
               </div>
               <p class="text-[11px] text-muted-foreground">
-                {{ contactsStore.currentContact.phone_number }}
+                {{ contactsStore.currentContact.channel === 'instagram' ? (contactsStore.currentContact.channel_identifier || contactsStore.currentContact.name) : contactsStore.currentContact.phone_number }}
               </p>
             </div>
           </div>

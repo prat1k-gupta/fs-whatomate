@@ -216,3 +216,11 @@ const (
 	ActionTypeURL        ActionType = "url"
 	ActionTypeJavascript ActionType = "javascript"
 )
+
+// Channel represents the messaging platform
+type Channel string
+
+const (
+	ChannelWhatsApp  Channel = "whatsapp"
+	ChannelInstagram Channel = "instagram"
+)

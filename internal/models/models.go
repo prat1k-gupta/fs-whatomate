@@ -92,8 +92,9 @@ type Organization struct {
 	Settings JSONB  `gorm:"type:jsonb;default:'{}'" json:"settings"`
 
 	// Relations
-	Users            []User            `gorm:"foreignKey:OrganizationID" json:"users,omitempty"`
-	WhatsAppAccounts []WhatsAppAccount `gorm:"foreignKey:OrganizationID" json:"whatsapp_accounts,omitempty"`
+	Users             []User             `gorm:"foreignKey:OrganizationID" json:"users,omitempty"`
+	WhatsAppAccounts  []WhatsAppAccount  `gorm:"foreignKey:OrganizationID" json:"whatsapp_accounts,omitempty"`
+	InstagramAccounts []InstagramAccount `gorm:"foreignKey:OrganizationID" json:"instagram_accounts,omitempty"`
 }
 
 func (Organization) TableName() string {
@@ -284,13 +285,38 @@ func (WhatsAppAccount) TableName() string {
 	return "whatsapp_accounts"
 }
 
-// Contact represents a WhatsApp contact/profile
+// InstagramAccount represents an Instagram Business Account connection
+type InstagramAccount struct {
+	BaseModel
+	OrganizationID     uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
+	Name               string    `gorm:"size:100;uniqueIndex:idx_ig_org_name;not null" json:"name"` // Unique per org, used as reference
+	InstagramAccountID string    `gorm:"size:100;not null" json:"instagram_account_id"`             // Instagram Business Account ID
+	PageID             string    `gorm:"size:100;not null" json:"page_id"`                          // Connected Facebook Page ID
+	AccessToken        string    `gorm:"type:text;not null" json:"-"`                               // encrypted, never exposed in JSON
+	WebhookVerifyToken string    `gorm:"size:255" json:"webhook_verify_token"`
+	APIVersion         string    `gorm:"size:20;default:'v21.0'" json:"api_version"`
+	IsDefaultIncoming  bool      `gorm:"default:false" json:"is_default_incoming"`
+	IsDefaultOutgoing  bool      `gorm:"default:false" json:"is_default_outgoing"`
+	Status             string    `gorm:"size:20;default:'active'" json:"status"`
+
+	// Relations
+	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+}
+
+func (InstagramAccount) TableName() string {
+	return "instagram_accounts"
+}
+
+// Contact represents a messaging contact/profile (WhatsApp or Instagram)
 type Contact struct {
 	BaseModel
 	OrganizationID     uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
-	PhoneNumber        string     `gorm:"size:20;not null" json:"phone_number"`
+	Channel            Channel    `gorm:"size:20;default:'whatsapp';index" json:"channel"`      // whatsapp or instagram
+	ChannelIdentifier  string     `gorm:"size:100;index" json:"channel_identifier,omitempty"`   // IGSID for Instagram, phone for WhatsApp
+	PhoneNumber        string     `gorm:"size:20" json:"phone_number"`                          // Phone number (primarily for WhatsApp)
 	ProfileName        string     `gorm:"size:255" json:"profile_name"`
-	WhatsAppAccount    string     `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
+	WhatsAppAccount    string     `gorm:"size:100;index" json:"whatsapp_account,omitempty"`     // References WhatsAppAccount.Name
+	InstagramAccount   string     `gorm:"size:100;index" json:"instagram_account,omitempty"`   // References InstagramAccount.Name
 	AssignedUserID     *uuid.UUID `gorm:"type:uuid;index" json:"assigned_user_id,omitempty"`
 	LastMessageAt      *time.Time `json:"last_message_at,omitempty"`
 	LastMessagePreview string     `gorm:"type:text" json:"last_message_preview"`
@@ -312,13 +338,16 @@ func (Contact) TableName() string {
 	return "contacts"
 }
 
-// Message represents a WhatsApp message
+// Message represents a messaging message (WhatsApp or Instagram)
 type Message struct {
 	BaseModel
 	OrganizationID    uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount   string     `gorm:"size:100;index;not null" json:"whatsapp_account"` // References WhatsAppAccount.Name
+	Channel           Channel    `gorm:"size:20;default:'whatsapp';index" json:"channel"`      // whatsapp or instagram
+	WhatsAppAccount   string     `gorm:"size:100;index" json:"whatsapp_account,omitempty"`     // References WhatsAppAccount.Name
+	InstagramAccount  string     `gorm:"size:100;index" json:"instagram_account,omitempty"`   // References InstagramAccount.Name
 	ContactID         uuid.UUID  `gorm:"type:uuid;index;not null" json:"contact_id"`
-	WhatsAppMessageID string     `gorm:"column:whats_app_message_id;size:255;index" json:"whatsapp_message_id"`
+	WhatsAppMessageID string     `gorm:"column:whats_app_message_id;size:255;index" json:"whatsapp_message_id,omitempty"`
+	InstagramMessageID string    `gorm:"size:255;index" json:"instagram_message_id,omitempty"` // Instagram message ID (mid)
 	ConversationID    string     `gorm:"size:255;index" json:"conversation_id"`
 	Direction         Direction   `gorm:"size:10;not null" json:"direction"`
 	MessageType       MessageType `gorm:"size:20;not null" json:"message_type"`

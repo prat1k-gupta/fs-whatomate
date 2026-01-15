@@ -66,6 +66,7 @@ func GetMigrationModels() []MigrationModel {
 		{"Webhook", &models.Webhook{}},
 		{"CustomAction", &models.CustomAction{}},
 		{"WhatsAppAccount", &models.WhatsAppAccount{}},
+		{"InstagramAccount", &models.InstagramAccount{}},
 		{"Contact", &models.Contact{}},
 		{"Message", &models.Message{}},
 		{"Template", &models.Template{}},
@@ -191,6 +192,11 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_agent_active ON agent_transfers(agent_id, status) WHERE status = 'active'`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_team ON agent_transfers(team_id, status) WHERE team_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_accounts_org_phone ON whatsapp_accounts(organization_id, phone_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_instagram_accounts_org_ig ON instagram_accounts(organization_id, instagram_account_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_contacts_channel ON contacts(organization_id, channel)`,
+		`CREATE INDEX IF NOT EXISTS idx_contacts_instagram_account ON contacts(instagram_account)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_instagram_account ON messages(instagram_account, created_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_account_name_lang ON templates(whats_app_account, name, language)`,
 		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_account ON keyword_rules(whats_app_account, is_enabled, priority DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chatbot_flows_account ON chatbot_flows(whats_app_account, is_enabled)`,
@@ -238,6 +244,15 @@ func CreateIndexes(db *gorm.DB) error {
 
 		// WhatsApp accounts indexes
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_accounts_org_phone ON whatsapp_accounts(organization_id, phone_id)`,
+
+		// Instagram accounts indexes
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_instagram_accounts_org_ig ON instagram_accounts(organization_id, instagram_account_id)`,
+
+		// Channel indexes for multi-channel support
+		`CREATE INDEX IF NOT EXISTS idx_contacts_channel ON contacts(organization_id, channel)`,
+		`CREATE INDEX IF NOT EXISTS idx_contacts_instagram_account ON contacts(instagram_account)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_instagram_account ON messages(instagram_account, created_at DESC)`,
 
 		// Templates indexes
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_account_name_lang ON templates(whats_app_account, name, language)`,
